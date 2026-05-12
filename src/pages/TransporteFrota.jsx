@@ -12,6 +12,7 @@ import autoTable from 'jspdf-autotable';
 const TransporteFrota = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState('...');
   const [rankingData, setRankingData] = useState([]);
   const [filtroMes, setFiltroMes] = useState('TODOS');
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
@@ -44,6 +45,21 @@ const TransporteFrota = () => {
     };
     fetchFiltros();
   }, []);
+
+  useEffect(() => {
+  const fetchUltimaAtualizacao = async () => {
+    const { data } = await supabaseFrota
+      .from('configuracoes')
+      .select('ultima_atualizacao')
+      .single();
+    
+    if (data?.ultima_atualizacao) {
+      const dataFormatada = new Date(data.ultima_atual_izacao).toLocaleString('pt-BR');
+      setUltimaAtualizacao(dataFormatada);
+    }
+  };
+  fetchUltimaAtualizacao();
+}, []);
 
   useEffect(() => {
     const fetchRanking = async () => {
@@ -194,7 +210,15 @@ const TransporteFrota = () => {
           <button onClick={() => navigate('/')} className="hover:bg-white/20 p-2 rounded-full transition backdrop-blur-sm bg-white/10"><ChevronLeft size={22} className="md:w-6 md:h-6" /></button>
           <div>
             <h1 className="font-black text-base md:text-2xl tracking-tight uppercase flex items-center gap-2 leading-tight"><Truck size={20} className="md:w-6 md:h-6" /> Ranking Frota</h1>
-            <p className="hidden sm:block text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">Ranking Total da Operação</p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+              Ranking Total da Operação
+            </p>
+            <span className="hidden sm:inline opacity-30">|</span>
+            <p className="text-[9px] font-black uppercase tracking-tighter bg-black/20 px-2 py-0.5 rounded-md flex items-center gap-1.5 w-fit">
+              <Clock size={10} className="text-[#10b981]" />
+              Atualizado em: {ultimaAtualizacao}
+            </p>
           </div>
         </div>
         <button onClick={exportarPDF} className="bg-white text-[#0f4c81] p-2.5 md:px-5 md:py-2.5 rounded-2xl font-black uppercase text-[10px] md:text-xs tracking-widest flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all">
