@@ -184,6 +184,10 @@ const Programacao = () => {
     const semFim = diasDaSemana[6].setHours(23,59,59,999);
     return dp <= semFim && df >= semInicio;
   });
+  
+  const itensParaExportacao = itensDaSemana.filter(i => 
+    filiaisExportacao.includes('TODAS') || filiaisExportacao.includes(i.filial)
+  );
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans print:bg-white">
@@ -449,71 +453,116 @@ const Programacao = () => {
           </div>
         </div>
       )}
-      <div className="hidden print:block p-10 bg-white font-sans text-slate-900">
-        <div className="border-b-4 border-[#0f4c81] pb-6 mb-8 flex justify-between items-end">
+      {/* --- NOVA SEÇÃO DE IMPRESSÃO (PDF) --- */}
+      <div className="hidden print:block p-8 bg-white font-sans text-slate-900">
+        <div className="border-b-4 border-[#0f4c81] pb-4 mb-6 flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-black text-[#0f4c81] uppercase tracking-tighter">Relatório de Programação</h1>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-1">Status Diário • Bandeirantes Deicmar</p>
+            <h1 className="text-2xl font-black text-[#0f4c81] uppercase tracking-tighter">Relatório de Programação</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bandeirantes Deicmar • Status Diário</p>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] font-black text-slate-400 uppercase">Unidade: {filiaisExportacao.join(' / ')}</p>
-            <p className="text-[10px] font-black text-slate-400 uppercase">Gerado em: {new Date().toLocaleString('pt-BR')}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-6 mb-10">
-          <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
-            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">O.S. Programadas</span>
-            <strong className="text-3xl text-[#0f4c81]">{itensDaSemana.length}</strong>
-          </div>
-          <div className="bg-emerald-50 p-5 rounded-3xl border border-emerald-100 text-center">
-            <span className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Concluídas</span>
-            <strong className="text-3xl text-emerald-600">{itensDaSemana.filter(i => i.situacao === 'FINALIZADO').length}</strong>
-          </div>
-          <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100 text-center">
-            <span className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Em Andamento</span>
-            <strong className="text-3xl text-amber-600">{itensDaSemana.filter(i => i.situacao === 'EM ANDAMENTO').length}</strong>
+          <div className="text-right text-[9px] font-bold text-slate-400 uppercase">
+            <div>Unidade: {filiaisExportacao.join(' / ')}</div>
+            <div>Gerado em: {new Date().toLocaleString('pt-BR')}</div>
           </div>
         </div>
 
+        {/* INDICADORES FILTRADOS */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+            <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total O.S.</span>
+            <strong className="text-xl text-[#0f4c81]">{itensParaExportacao.length}</strong>
+          </div>
+          <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+            <span className="block text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Finalizadas</span>
+            <strong className="text-xl text-emerald-600">{itensParaExportacao.filter(i => i.situacao === 'FINALIZADO').length}</strong>
+          </div>
+          <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 text-center">
+            <span className="block text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Em Andamento</span>
+            <strong className="text-xl text-amber-600">{itensParaExportacao.filter(i => i.situacao === 'EM ANDAMENTO').length}</strong>
+          </div>
+        </div>
+
+        {/* MINI GANTT DE IMPRESSÃO */}
+        <div className="mb-10">
+          <h2 className="text-[10px] font-black text-[#0f4c81] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+            <Calendar size={12} /> Cronograma Simplificado
+          </h2>
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-[8px] border-collapse">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-200">
+                  <th className="p-2 text-left border-r border-slate-200 w-24">Máquina</th>
+                  {diasDaSemana.map((dia, i) => (
+                    <th key={i} className="p-2 text-center border-r border-slate-200">
+                      {DIAS_SEMANA[i]}<br/>{dia.getDate()}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {itensParaExportacao.map((item) => {
+                  const dataP = new Date(item.data_parada); dataP.setHours(0,0,0,0);
+                  const dataF = item.data_final ? new Date(item.data_final) : (item.prazo ? new Date(item.prazo) : dataP);
+                  dataF.setHours(0,0,0,0);
+
+                  return (
+                    <tr key={item.id} className="border-b border-slate-100">
+                      <td className="p-2 font-black text-[#0f4c81] border-r border-slate-200 bg-white">{item.placa}</td>
+                      {diasDaSemana.map((dia, idx) => {
+                        const estaAtivo = dia >= dataP && dia <= dataF;
+                        return (
+                          <td key={idx} className="p-0 border-r border-slate-100 h-6">
+                            {estaAtivo && (
+                              <div className={`h-full w-full ${item.situacao === 'FINALIZADO' ? 'bg-emerald-500/30' : 'bg-[#0f4c81]/30'}`}></div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* LISTAGEM DETALHADA */}
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-[#0f4c81] text-white">
-              <th className="p-4 text-left text-[10px] font-black uppercase tracking-widest rounded-tl-2xl">Equipamento</th>
-              <th className="p-4 text-left text-[10px] font-black uppercase tracking-widest">Detalhes da Manutenção</th>
-              <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest">Situação</th>
-              <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest rounded-tr-2xl">Prazos</th>
+              <th className="p-3 text-left text-[9px] font-black uppercase rounded-tl-xl">Equipamento</th>
+              <th className="p-3 text-left text-[9px] font-black uppercase">Manutenção</th>
+              <th className="p-3 text-center text-[9px] font-black uppercase">Status</th>
+              <th className="p-3 text-right text-[9px] font-black uppercase rounded-tr-xl">Prazos</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {itensDaSemana.map((i, idx) => (
-              <tr key={i.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                <td className="p-4 align-top">
-                  <div className="font-black text-[#0f4c81] text-base">{i.placa}</div>
-                  <div className="text-[10px] font-bold text-slate-500 mt-1">O.S.: {i.os || '---'}</div>
-                  <div className="text-[9px] font-bold text-slate-400 uppercase">{i.filial}</div>
+            {itensParaExportacao.map((i, idx) => (
+              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                <td className="p-3">
+                  <div className="font-black text-[#0f4c81] text-xs">{i.placa}</div>
+                  <div className="text-[8px] font-bold text-slate-400">OS: {i.os || '---'}</div>
                 </td>
-                <td className="p-4 align-top">
-                  <div className="text-[11px] font-black text-red-500 uppercase">{i.tipo}</div>
-                  <div className="text-xs text-slate-800 font-bold mt-0.5">{i.falha}</div>
-                  {i.observacoes && <div className="text-[10px] text-slate-500 italic mt-2 border-l-2 border-slate-200 pl-2">{i.observacoes}</div>}
+                <td className="p-3">
+                  <div className="text-[9px] font-black text-red-500 uppercase">{i.tipo}</div>
+                  <div className="text-[9px] text-slate-700 font-bold">{i.falha}</div>
+                  {i.observacoes && <div className="text-[8px] text-slate-400 italic mt-1 leading-tight">"{i.observacoes}"</div>}
                 </td>
-                <td className="p-4 align-top text-center">
-                  <span className={`inline-block px-4 py-1.5 rounded-full text-[9px] font-black uppercase border ${
-                    i.situacao === 'FINALIZADO' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    i.situacao === 'EM ANDAMENTO' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-500 border-slate-200'
+                <td className="p-3 text-center">
+                  <span className={`px-2 py-1 rounded-full text-[7px] font-black uppercase border ${
+                    i.situacao === 'FINALIZADO' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                    i.situacao === 'EM ANDAMENTO' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-200'
                   }`}>{i.situacao}</span>
                 </td>
-                <td className="p-4 align-top text-right">
-                  <div className="text-[10px] font-bold text-slate-600 mb-1"><span className="text-slate-400 font-black">INÍCIO:</span> {i.data_parada ? new Date(i.data_parada).toLocaleDateString('pt-BR') : '-'}</div>
-                  <div className="text-[10px] font-bold text-slate-600"><span className="text-slate-400 font-black">FIM:</span> {i.data_final ? new Date(i.data_final).toLocaleDateString('pt-BR') : (i.prazo ? new Date(i.prazo).toLocaleDateString('pt-BR') : '-')}</div>
+                <td className="p-3 text-right text-[8px] font-bold text-slate-500">
+                  <div>Início: {i.data_parada ? new Date(i.data_parada).toLocaleDateString('pt-BR') : '-'}</div>
+                  <div>Fim: {i.data_final ? new Date(i.data_final).toLocaleDateString('pt-BR') : (i.prazo ? new Date(i.prazo).toLocaleDateString('pt-BR') : '-')}</div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {/* --- FIM DO CÓDIGO DE IMPRESSÃO --- */}
 
     </div> 
   );
