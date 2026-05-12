@@ -31,7 +31,7 @@ const HubInicial = () => {
     { 
       id: 'programacao', 
       titulo: 'Programação', 
-      desc: 'Dimensionamento', 
+      desc: 'Cronograma', 
       icon: <CalendarClock size={32} />, 
       active: true,
       path: '/Programacao',
