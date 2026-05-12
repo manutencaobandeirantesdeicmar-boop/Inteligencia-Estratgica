@@ -6,7 +6,6 @@ import {
   Star as Medal, Package, Clock, Award, FileDown
 } from 'lucide-react';
 
-// Importações para o PDF
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -18,7 +17,6 @@ const TransporteFrota = () => {
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
   const [opcoesFiltros, setOpcoesFiltros] = useState({ meses: [], tipos: [] });
 
-  // --- CARREGAMENTO DE DADOS ---
   useEffect(() => {
     const fetchFiltros = async () => {
       const { data } = await supabaseFrota
@@ -68,96 +66,85 @@ const TransporteFrota = () => {
     return grupos;
   }, [rankingData, filtroTipo]);
 
-  // --- LÓGICA DE GERAÇÃO DO PDF ---
   const exportarPDF = () => {
     const doc = new jsPDF('p', 'mm', 'a4');
     const azulMarinho = [15, 76, 129];
     const verdeEsmeralda = [16, 185, 129];
     
-    // 1. Cabeçalho Estilizado
+    // Cabeçalho
     doc.setFillColor(...azulMarinho);
     doc.rect(0, 0, 210, 40, 'F');
-    
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(22);
+    doc.setFontSize(20);
     doc.text('RANKING OPERACIONAL - FROTA', 15, 20);
-    
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`RELATÓRIO: ${filtroTipo} | MÊS: ${filtroMes}`, 15, 28);
     doc.text(`EMITIDO EM: ${new Date().toLocaleDateString('pt-BR')}`, 15, 33);
-
-    // Linha divisória verde
     doc.setDrawColor(...verdeEsmeralda);
     doc.setLineWidth(1.5);
     doc.line(0, 40, 210, 40);
 
-    // 2. Lógica de Colunas
     let yPos = 50;
     const turnos = Object.entries(rankingPorTurno);
     
-    // Vamos iterar de 2 em 2 turnos para criar as colunas
+    // Processamento de 2 em 2 turnos para colunas
     for (let i = 0; i < turnos.length; i += 2) {
-      const turnoEsquerda = turnos[i];
-      const turnoDireita = turnos[i + 1];
+      const tEsquerda = turnos[i];
+      const tDireita = turnos[i + 1];
 
-      // Título da Coluna Esquerda
+      let finalYEsquerda = yPos;
+      let finalYDireita = yPos;
+
+      // LADO ESQUERDO
       doc.setTextColor(...azulMarinho);
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      doc.text(`TURNO: ${turnoEsquerda[0]}`, 15, yPos);
+      doc.text(`TURNO: ${tEsquerda[0]}`, 15, yPos);
 
-      // Tabela Esquerda
       autoTable(doc, {
-        startY: yPos + 5,
-        margin: { left: 15, right: 110 }, // Limita a largura para a metade
-        head: [['POS', 'MOTORISTA', 'VIAGENS']],
-        body: turnoEsquerda[1].map((m, idx) => [
-          `${idx + 1}º`,
-          m.nome,
-          m.total
-        ]),
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: azulMarinho, textColor: 255 },
-        columnStyles: { 
-            0: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
-            2: { halign: 'center', fontStyle: 'bold', textColor: filtroTipo === 'EXTRA' ? [225, 29, 72] : verdeEsmeralda } 
-        },
+        startY: yPos + 4,
+        margin: { left: 15, right: 110 },
+        head: [['POS', 'MOTORISTA', 'TOTAL']],
+        body: tEsquerda[1].map((m, idx) => [`${idx + 1}º`, m.nome, m.total]),
+        styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { fillColor: azulMarinho },
+        columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 2: { halign: 'center', fontStyle: 'bold' } },
         didParseCell: (data) => {
-            if (data.section === 'body' && data.column.index === 0) {
-                if (data.row.index === 0) data.cell.styles.fillColor = [254, 249, 195]; // Ouro
-                if (data.row.index === 1) data.cell.styles.fillColor = [241, 245, 249]; // Prata
-            }
+          if (data.section === 'body' && data.column.index === 0 && data.row.index === 0) {
+            data.cell.styles.fillColor = [254, 249, 195];
+          }
         }
       });
+      finalYEsquerda = doc.lastAutoTable.finalY;
 
-      // Se existir um turno para a direita
-      if (turnoDireita) {
-        doc.text(`TURNO: ${turnoDireita[0]}`, 110, yPos);
+      // LADO DIREITO
+      if (tDireita) {
+        doc.text(`TURNO: ${tDireita[0]}`, 110, yPos);
         autoTable(doc, {
-          startY: yPos + 5,
+          startY: yPos + 4,
           margin: { left: 110, right: 15 },
-          head: [['POS', 'MOTORISTA', 'VIAGENS']],
-          body: turnoDireita[1].map((m, idx) => [
-            `${idx + 1}º`,
-            m.nome,
-            m.total
-          ]),
-          styles: { fontSize: 8, cellPadding: 2 },
-          headStyles: { fillColor: [71, 85, 105], textColor: 255 },
-          columnStyles: { 
-            0: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
-            2: { halign: 'center', fontStyle: 'bold', textColor: filtroTipo === 'EXTRA' ? [225, 29, 72] : verdeEsmeralda } 
-          }
+          head: [['POS', 'MOTORISTA', 'TOTAL']],
+          body: tDireita[1].map((m, idx) => [`${idx + 1}º`, m.nome, m.total]),
+          styles: { fontSize: 7, cellPadding: 1.5 },
+          headStyles: { fillColor: [71, 85, 105] },
+          columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 2: { halign: 'center', fontStyle: 'bold' } }
         });
+        finalYDireita = doc.lastAutoTable.finalY;
       }
 
-      // Atualiza yPos para o próximo par de turnos (baseado na maior tabela desenhada)
-      yPos = doc.lastAutoTable.finalY + 15;
+      // O novo Y será o maior valor entre as duas tabelas desenhadas
+      yPos = Math.max(finalYEsquerda, finalYDireita) + 15;
+
+      // Verificação de quebra de página
+      if (yPos > 260 && i + 2 < turnos.length) {
+        doc.addPage();
+        yPos = 20;
+      }
     }
 
-    doc.save(`Ranking_Frota_${filtroMes}_${filtroTipo}.pdf`);
+    doc.save(`Ranking_Frota_${filtroMes}.pdf`);
   };
 
   const renderizarPodio = (posicao) => {
@@ -177,12 +164,7 @@ const TransporteFrota = () => {
             <p className="text-xs font-bold uppercase tracking-widest opacity-80 mt-1">Ranking Total da Operação</p>
           </div>
         </div>
-        
-        {/* BOTÃO DE EXPORTAR PDF */}
-        <button 
-          onClick={exportarPDF}
-          className="bg-white text-[#0f4c81] px-5 py-2.5 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all"
-        >
+        <button onClick={exportarPDF} className="bg-white text-[#0f4c81] px-5 py-2.5 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all">
           <FileDown size={18} /> Exportar PDF
         </button>
       </header>
@@ -191,14 +173,14 @@ const TransporteFrota = () => {
         <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center justify-between">
           <div className="flex items-center gap-3 text-[#0f4c81] font-black uppercase tracking-widest text-sm px-2"><Filter size={18} /> Filtros Dinâmicos</div>
           <div className="flex flex-wrap gap-4 flex-1 justify-end">
-            <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1 px-3 hover:border-[#10b981] transition-colors">
+            <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1 px-3">
               <Calendar size={16} className="text-[#0f4c81] mr-2" />
               <select value={filtroMes} onChange={e => setFiltroMes(e.target.value)} className="bg-transparent font-bold text-[#0f4c81] text-sm outline-none py-2 uppercase cursor-pointer">
                 <option value="TODOS">Todos os Meses</option>
                 {opcoesFiltros.meses.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1 px-3 hover:border-[#10b981] transition-colors">
+            <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1 px-3">
               <Package size={16} className="text-[#0f4c81] mr-2" />
               <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} className="bg-transparent font-bold text-[#0f4c81] text-sm outline-none py-2 uppercase cursor-pointer">
                 <option value="TODOS">Todos os Tipos</option>
