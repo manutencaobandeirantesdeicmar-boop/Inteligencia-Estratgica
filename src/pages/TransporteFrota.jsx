@@ -54,7 +54,7 @@ const TransporteFrota = () => {
       .single();
     
     if (data?.ultima_atualizacao) {
-      const dataFormatada = new Date(data.ultima_atual_izacao).toLocaleString('pt-BR');
+      const dataFormatada = new Date(data.ultima_atualizacao).toLocaleString('pt-BR');
       setUltimaAtualizacao(dataFormatada);
     }
   };
