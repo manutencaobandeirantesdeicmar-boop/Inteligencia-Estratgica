@@ -6,7 +6,7 @@ import {
   Calendar, Wrench, ChevronLeft, PlusCircle, Search, 
   Layout, Printer, Clock, AlertTriangle, CheckCircle2, 
   X, ChevronRight, Info, Edit3, ChevronLeft as LeftIcon, 
-  ChevronRight as RightIcon, Mail, FileText 
+  ChevronRight as RightIcon, Mail, FileText, Trash2 
 } from 'lucide-react';
 
 const FILIAIS = ['CLIA', 'IPA', 'BK', 'HUB', 'FROTA'];
@@ -83,6 +83,21 @@ const Programacao = () => {
 
     if (!error) { setModalAberto(false); fetchProgramacao(); } 
     else { alert("Erro ao salvar: " + error.message); }
+  };
+
+  const handleExcluir = async (id) => {
+    if (!window.confirm("⚠️ Tem certeza que deseja excluir esta programação permanentemente?")) return;
+    
+    setLoading(true);
+    const { error } = await supabase.from('programacao').delete().eq('id', id);
+    
+    if (!error) {
+      setModalAberto(false);
+      fetchProgramacao();
+    } else {
+      alert("Erro ao excluir: " + error.message);
+    }
+    setLoading(false);
   };
 
   const abrirEdicao = (item) => {
@@ -244,6 +259,9 @@ const Programacao = () => {
                           <div className="flex justify-between items-start mb-2">
                             <h4 className="font-black text-[#0f4c81] text-lg">{item.placa}</h4>
                             <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-md">{item.os}</span>
+                            <button onClick={(e) => { e.stopPropagation(); handleExcluir(item.id); }} className="text-slate-300 hover:text-red-500 transition-colors">
+                            <Trash2 size={14} />
+                            </button>
                           </div>
                           <p className="text-[11px] font-black text-red-500 mb-3 uppercase tracking-widest">{item.tipo} • {item.falha}</p>
 
@@ -452,6 +470,11 @@ const Programacao = () => {
               </div>
             </div>
             <div className="p-6 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-4 justify-end">
+              {itemEditando && (
+              <button onClick={() => handleExcluir(itemEditando.id)}  className="px-6 py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl mr-auto flex items-center gap-2">
+              <Trash2 size={18} /> Excluir Registro
+              </button>
+               )}
               <button onClick={() => setModalAberto(false)} className="px-6 py-3 text-slate-500 font-bold hover:bg-slate-200 rounded-xl order-2 sm:order-1">Cancelar</button>
               <button onClick={handleSalvar} className="px-8 py-3 bg-[#0f4c81] text-white font-black uppercase tracking-widest rounded-xl shadow-lg hover:scale-105 transition-transform order-1 sm:order-2">Salvar</button>
             </div>
