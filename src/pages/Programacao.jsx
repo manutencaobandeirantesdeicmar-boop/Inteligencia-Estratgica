@@ -199,7 +199,7 @@ const Programacao = () => {
         </div>
       </header>
 
-      <main className="p-2 md:p-4 max-w-[1700px] mx-auto print:p-0">
+      <main className="p-2 md:p-4 max-w-[1700px] mx-auto print:hidden">
         {/* FILTROS RESPONSIVOS */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center mb-6 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 print:hidden gap-4">
           <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -449,6 +449,77 @@ const Programacao = () => {
           </div>
         </div>
       )}
+      <div className="hidden print:block p-10 bg-white font-sans text-slate-900">
+        <div className="border-b-4 border-[#0f4c81] pb-6 mb-8 flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-black text-[#0f4c81] uppercase tracking-tighter">Relatório de Programação</h1>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-1">Status Diário • Bandeirantes Deicmar</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-black text-slate-400 uppercase">Unidade: {filiaisExportacao.join(' / ')}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase">Gerado em: {new Date().toLocaleString('pt-BR')}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-6 mb-10">
+          <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
+            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">O.S. Programadas</span>
+            <strong className="text-3xl text-[#0f4c81]">{itensDaSemana.length}</strong>
+          </div>
+          <div className="bg-emerald-50 p-5 rounded-3xl border border-emerald-100 text-center">
+            <span className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Concluídas</span>
+            <strong className="text-3xl text-emerald-600">{itensDaSemana.filter(i => i.situacao === 'FINALIZADO').length}</strong>
+          </div>
+          <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100 text-center">
+            <span className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Em Andamento</span>
+            <strong className="text-3xl text-amber-600">{itensDaSemana.filter(i => i.situacao === 'EM ANDAMENTO').length}</strong>
+          </div>
+        </div>
+
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-[#0f4c81] text-white">
+              <th className="p-4 text-left text-[10px] font-black uppercase tracking-widest rounded-tl-2xl">Equipamento</th>
+              <th className="p-4 text-left text-[10px] font-black uppercase tracking-widest">Detalhes da Manutenção</th>
+              <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest">Situação</th>
+              <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest rounded-tr-2xl">Prazos</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {itensDaSemana.map((i, idx) => (
+              <tr key={i.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                <td className="p-4 align-top">
+                  <div className="font-black text-[#0f4c81] text-base">{i.placa}</div>
+                  <div className="text-[10px] font-bold text-slate-500 mt-1">O.S.: {i.os || '---'}</div>
+                  <div className="text-[9px] font-bold text-slate-400 uppercase">{i.filial}</div>
+                </td>
+                <td className="p-4 align-top">
+                  <div className="text-[11px] font-black text-red-500 uppercase">{i.tipo}</div>
+                  <div className="text-xs text-slate-800 font-bold mt-0.5">{i.falha}</div>
+                  {i.observacoes && <div className="text-[10px] text-slate-500 italic mt-2 border-l-2 border-slate-200 pl-2">{i.observacoes}</div>}
+                </td>
+                <td className="p-4 align-top text-center">
+                  <span className={`inline-block px-4 py-1.5 rounded-full text-[9px] font-black uppercase border ${
+                    i.situacao === 'FINALIZADO' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    i.situacao === 'EM ANDAMENTO' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-500 border-slate-200'
+                  }`}>{i.situacao}</span>
+                </td>
+                <td className="p-4 align-top text-right">
+                  <div className="text-[10px] font-bold text-slate-600 mb-1"><span className="text-slate-400 font-black">INÍCIO:</span> {i.data_parada ? new Date(i.data_parada).toLocaleDateString('pt-BR') : '-'}</div>
+                  <div className="text-[10px] font-bold text-slate-600"><span className="text-slate-400 font-black">FIM:</span> {i.data_final ? new Date(i.data_final).toLocaleDateString('pt-BR') : (i.prazo ? new Date(i.prazo).toLocaleDateString('pt-BR') : '-')}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* --- FIM DO CÓDIGO DE IMPRESSÃO --- */}
+
+    </div> // ESTE É O ÚLTIMO DIV DO COMPONENTE
+  );
+};
+
+export default Programacao;
     </div>
   );
 };
