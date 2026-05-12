@@ -24,7 +24,6 @@ const Programacao = () => {
   const [filtroFilial, setFiltroFilial] = useState('TODAS');
   const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
   
-  // Controle Cronograma (Semanas)
   const [dataBaseGantt, setDataBaseGantt] = useState(() => {
     const d = new Date();
     const day = d.getDay();
@@ -33,7 +32,6 @@ const Programacao = () => {
     return start;
   });
 
-  // Modais e Formulário
   const [modalAberto, setModalAberto] = useState(false);
   const [modalExportarAberto, setModalExportarAberto] = useState(false);
   const [itemEditando, setItemEditando] = useState(null);
@@ -46,7 +44,6 @@ const Programacao = () => {
     falha: 'MOTOR', prazo: '', data_final: '', observacoes: '', situacao: 'PROGRAMADO'
   });
 
-  // --- LÓGICA DE DATAS DA SEMANA ---
   const getDiasGantt = () => Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(dataBaseGantt);
     d.setDate(dataBaseGantt.getDate() + i);
@@ -65,13 +62,13 @@ const Programacao = () => {
     setDataBaseGantt(start);
   };
 
-  // --- BUSCA SUPABASE ---
   const fetchProgramacao = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('programacao').select('*').order('data_parada', { ascending: true });
     if (!error) setDados(data);
     setLoading(false);
   };
+
   useEffect(() => { fetchProgramacao(); }, []);
 
   const handleSalvar = async () => {
@@ -99,8 +96,30 @@ const Programacao = () => {
     setModalAberto(true);
   };
 
-  
-  // --- FUNÇÃO DE ENVIO DE E-MAIL (COM BUSCA DE MODELO E ORDENAÇÃO) ---
+  // --- LÓGICA DRAG AND DROP ---
+  const onDragStart = (e, id) => {
+    e.dataTransfer.setData("id", id);
+  };
+
+  const onDragOver = (e, coluna) => {
+    e.preventDefault();
+    if (colunaAberta !== coluna) {
+      setColunaAberta(coluna);
+    }
+  };
+
+  const onDrop = async (e, novaSituacao) => {
+    const id = e.dataTransfer.getData("id");
+    const { error } = await supabase
+      .from('programacao')
+      .update({ situacao: novaSituacao })
+      .eq('id', id);
+
+    if (!error) {
+      fetchProgramacao();
+    }
+  };
+
   const dispararEmail = async () => {
     if (!destinatariosEmail) {
       alert("⚠️ Por favor, digite o e-mail de destino.");
@@ -108,13 +127,10 @@ const Programacao = () => {
     }
 
     try {
-      // 1. Filtra os dados da semana e das filiais
       const dadosParaEnvio = dados.filter(i => {
         if(!i.data_parada) return false;
-        
         const atendeFilial = filiaisExportacao.includes('TODAS') || filiaisExportacao.includes(i.filial);
         if (!atendeFilial) return false;
-        
         const dp = new Date(i.data_parada).setHours(0,0,0,0);
         const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
         const semInicio = diasDaSemana[0].setHours(0,0,0,0);
@@ -122,7 +138,6 @@ const Programacao = () => {
         return dp <= semFim && df >= semInicio;
       });
 
-      // 2. Busca a 'descricao_modelo' na tabela equipamentos
       const placasDaSemana = [...new Set(dadosParaEnvio.map(i => i.placa))];
       let equipamentosInfo = [];
 
@@ -137,26 +152,17 @@ const Programacao = () => {
         }
       }
 
-      // 3. Junta as informações e Ordena (Reach Stacker no topo)
       const itensOrdenados = dadosParaEnvio.map(item => {
         const equip = equipamentosInfo.find(e => e.id === item.placa);
-        return {
-          ...item,
-          descricao_modelo: equip ? equip.descricao_modelo : 'FROTA/OUTRO'
-        };
+        return { ...item, descricao_modelo: equip ? equip.descricao_modelo : 'FROTA/OUTRO' };
       }).sort((a, b) => {
-        const modeloA = a.descricao_modelo.toUpperCase();
-        const modeloB = b.descricao_modelo.toUpperCase();
-        
-        const aIsRS = modeloA.includes('REACH STACKER');
-        const bIsRS = modeloB.includes('REACH STACKER');
-        
+        const aIsRS = a.descricao_modelo.toUpperCase().includes('REACH STACKER');
+        const bIsRS = b.descricao_modelo.toUpperCase().includes('REACH STACKER');
         if (aIsRS && !bIsRS) return -1;
         if (!aIsRS && bIsRS) return 1;
-        return 0; // Mantém a ordem se ambos forem ou não forem Reach Stacker
+        return 0;
       });
 
-      // 4. Montagem da Tabela Única HTML
       let htmlCorpo = `<table width="100%" cellpadding="10" cellspacing="0" style="border: 1px solid #e2e8f0; font-family: sans-serif; font-size: 12px; border-collapse: collapse;">
         <tr style="background-color: #0f4c81; color: white; text-transform: uppercase; font-size: 11px;">
           <th align="left">Identificação</th>
@@ -170,7 +176,6 @@ const Programacao = () => {
       } else {
           itensOrdenados.forEach(i => {
             const isRS = i.descricao_modelo.toUpperCase().includes('REACH STACKER');
-            // Fundo azul claro se for Reach Stacker
             const corBg = isRS ? 'background-color: #f0f9ff;' : '';
             const corStatus = i.situacao === 'FINALIZADO' ? '#10b981' : (i.situacao === 'EM ANDAMENTO' ? '#f59e0b' : '#64748b');
 
@@ -196,7 +201,6 @@ const Programacao = () => {
       }
       htmlCorpo += `</table>`;
 
-      // 5. Envio
       const templateParams = {
         unidades: filiaisExportacao.join(', '),
         total_os: itensOrdenados.length,
@@ -205,7 +209,6 @@ const Programacao = () => {
       };
 
       await emailjs.send('service_ql8lpnh', 'template_jucx4wg', templateParams, 'dxlv8dovCZmMHhwgD');
-      
       alert('✅ Relatório enviado com sucesso!');
       setModalExportarAberto(false);
       setDestinatariosEmail('');
@@ -214,24 +217,19 @@ const Programacao = () => {
     }
   };
 
-  // --- DADOS FILTRADOS PARA A SEMANA SELECIONADA ---
   const dadosFiltradosGerais = dados.filter(i => filtroFilial === 'TODAS' || i.filial === filtroFilial);
   
-  // Filtra apenas O.S. que sobrepõem a semana visualizada no Gráfico
   const itensDaSemana = dadosFiltradosGerais.filter(i => {
     if(!i.data_parada) return false;
     const dp = new Date(i.data_parada).setHours(0,0,0,0);
     const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
     const semInicio = diasDaSemana[0].setHours(0,0,0,0);
     const semFim = diasDaSemana[6].setHours(23,59,59,999);
-    // Retorna true se a parada começou antes do fim da semana E terminou depois do início da semana
     return dp <= semFim && df >= semInicio;
   });
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans print:bg-white">
-      
-      {/* HEADER TELA */}
       <header className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-30 print:hidden">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/')} className="hover:bg-white/20 p-2 rounded-full transition"><ChevronLeft /></button>
@@ -243,49 +241,7 @@ const Programacao = () => {
         </div>
       </header>
 
-      {/* HEADER CORPORATIVO (IMPRESSÃO) */}
-      <div className="hidden print:block mb-8 border-b-4 border-[#0f4c81] pb-6 pt-4">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h1 className="text-3xl font-black text-[#0f4c81] uppercase tracking-tighter">Cronograma Semanal de Manutenção</h1>
-            <h2 className="text-lg font-bold text-slate-500 uppercase tracking-widest mt-1">Unidade: {filtroFilial}</h2>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-slate-400 uppercase">Bandeirantes Deicmar</p>
-            <p className="text-sm font-bold text-emerald-600">Período: {diasDaSemana[0].toLocaleDateString()} a {diasDaSemana[6].toLocaleDateString()}</p>
-          </div>
-        </div>
-      </div>
-
       <main className="p-4 max-w-[1700px] mx-auto print:p-0">
-
-        {/* CABEÇALHO CORPORATIVO DE IMPRESSÃO */}
-        <div className="hidden print:flex report-header">
-          <div className="flex flex-col">
-            <h1 className="report-title">Programação Semanal</h1>
-            <p className="text-sm font-bold opacity-80 uppercase tracking-widest">
-              Bandeirantes Deicmar - Hub Logístico
-            </p>
-            <p className="text-xs mt-1">
-              Período: {diasDaSemana[0].toLocaleDateString()} a {diasDaSemana[6].toLocaleDateString()}
-            </p>
-          </div>
-          
-          <div className="flex flex-col items-end">
-            {/* COLOQUE O LINK DO SEU LOGO AQUI */}
-            <img 
-              src="LINK_DA_SUA_LOGO_AQUI" 
-              alt="Logo Empresa" 
-              className="report-logo mb-2"
-              onError={(e) => e.target.style.display = 'none'} 
-            />
-            <span className="text-[10px] font-black uppercase opacity-60">
-              Unidade: {filtroFilial}
-            </span>
-          </div>
-        </div>
-        
-        {/* BARRA DE FILTROS DA TELA */}
         <div className="flex justify-between items-center mb-6 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 print:hidden">
           <div className="flex bg-slate-100 p-1 rounded-xl">
             <button onClick={() => setAbaAtiva('kanban')} className={`px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${abaAtiva === 'kanban' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}><Layout size={16}/> Acompanhamento </button>
@@ -297,14 +253,19 @@ const Programacao = () => {
           </select>
         </div>
 
-        {/* --- VISÃO 1: KANBAN ACORDEÃO --- */}
         {abaAtiva === 'kanban' && (
           <div className="flex gap-4 overflow-x-hidden w-full h-[75vh] items-stretch print:hidden">
             {COLUNAS_KANBAN.map(coluna => {
               const isOpen = colunaAberta === coluna;
               const itens = dadosFiltradosGerais.filter(i => i.situacao === coluna);
               return (
-                <div key={coluna} onClick={() => !isOpen && setColunaAberta(coluna)} className={`transition-all duration-500 flex flex-col bg-white rounded-3xl border border-slate-200 overflow-hidden ${isOpen ? 'flex-1 shadow-xl' : 'w-[70px] cursor-pointer hover:bg-slate-50'}`}>
+                <div 
+                  key={coluna} 
+                  onDragOver={(e) => onDragOver(e, coluna)}
+                  onDrop={(e) => onDrop(e, coluna)}
+                  onClick={() => !isOpen && setColunaAberta(coluna)} 
+                  className={`transition-all duration-500 flex flex-col bg-white rounded-3xl border border-slate-200 overflow-hidden ${isOpen ? 'flex-1 shadow-xl' : 'w-[70px] cursor-pointer hover:bg-slate-50'}`}
+                >
                   <div className={`p-4 flex justify-between items-center bg-slate-50 border-b border-slate-100 ${!isOpen && 'h-full flex-col justify-start pt-8'}`}>
                     <h3 className={`font-black uppercase tracking-widest text-[#0f4c81] ${isOpen ? 'text-sm' : 'text-[10px] [writing-mode:vertical-lr] rotate-180'}`}>{coluna}</h3>
                     <span className={`bg-[#0f4c81] text-white font-bold rounded-full flex items-center justify-center ${isOpen ? 'px-3 py-1 text-xs' : 'w-8 h-8 text-[10px] mt-4'}`}>{itens.length}</span>
@@ -312,7 +273,13 @@ const Programacao = () => {
                   {isOpen && (
                     <div className="p-4 overflow-y-auto h-full flex flex-wrap gap-4 items-start content-start bg-slate-50/50">
                       {itens.map(item => (
-                        <div key={item.id} onClick={(e) => { e.stopPropagation(); abrirEdicao(item); }} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-l-8 border-l-[#10b981] hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer group w-full md:w-[calc(50%-8px)] lg:w-[calc(33.33%-11px)]">
+                        <div 
+                          key={item.id} 
+                          draggable 
+                          onDragStart={(e) => onDragStart(e, item.id)}
+                          onClick={(e) => { e.stopPropagation(); abrirEdicao(item); }} 
+                          className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-l-8 border-l-[#10b981] hover:shadow-lg hover:-translate-y-1 transition-all cursor-grab active:cursor-grabbing group w-full md:w-[calc(50%-8px)] lg:w-[calc(33.33%-11px)]"
+                        >
                           <div className="flex justify-between items-start mb-2">
                             <h4 className="font-black text-[#0f4c81] text-lg">{item.placa}</h4>
                             <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-md">{item.os}</span>
@@ -331,27 +298,22 @@ const Programacao = () => {
           </div>
         )}
 
-        {/* --- VISÃO 2: CRONOGRAMA PROPORCIONAL GANTT --- */}
-        {(abaAtiva === 'cronograma' || window.matchMedia("print").matches) && (
+        {abaAtiva === 'cronograma' && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-white overflow-visible flex flex-col print:shadow-none print:border-none print:rounded-none">
-            
             <div className="flex justify-between items-center p-4 bg-slate-50 rounded-t-[2rem] border-b border-slate-100 print:hidden">
               <div className="flex items-center gap-4">
-                 <h2 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm ml-4">Gantt Visual</h2>
-                 <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
-                    <button onClick={prevWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><LeftIcon size={18}/></button>
-                    <button onClick={resetWeek} className="px-4 font-bold text-xs uppercase text-[#0f4c81] hover:bg-slate-50 transition">Semana Atual</button>
-                    <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><RightIcon size={18}/></button>
-                 </div>
+                  <h2 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm ml-4">Gantt Visual</h2>
+                  <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
+                     <button onClick={prevWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><LeftIcon size={18}/></button>
+                     <button onClick={resetWeek} className="px-4 font-bold text-xs uppercase text-[#0f4c81] hover:bg-slate-50 transition">Semana Atual</button>
+                     <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><RightIcon size={18}/></button>
+                  </div>
               </div>
             </div>
 
             <div className="overflow-x-auto overflow-y-auto max-h-[65vh] pb-32 print:pb-0 print:max-h-none print:overflow-visible">
               <table className="w-full text-sm border-collapse min-w-[900px]">
-                
-                {/* 2. O thead agora é sticky, fica no top-0 e tem z-[70] para ficar acima das barras */}
                 <thead className="sticky top-0 z-[70] print:static">
-                  {/* Fundo levemente opaco para as linhas não ficarem bagunçadas ao passar por baixo */}
                   <tr className="bg-slate-100/95 backdrop-blur-md shadow-sm border-b border-slate-200">
                     {diasDaSemana.map((dia, idx) => (
                       <th key={idx} className="p-4 text-center border-r border-slate-200/60 w-[14.28%]">
@@ -365,17 +327,12 @@ const Programacao = () => {
                   {itensDaSemana.map((item) => {
                     const dataParada = new Date(item.data_parada);
                     dataParada.setHours(0,0,0,0);
-                    
                     const dataFimReal = item.data_final ? new Date(item.data_final) : (item.prazo ? new Date(item.prazo) : dataParada);
                     dataFimReal.setHours(0,0,0,0);
-                    
-                    // Cálculo das Proporções da Barra (Início e Fim na Semana)
                     let startIdx = diasDaSemana.findIndex(d => d.getTime() === dataParada.getTime());
                     if (startIdx === -1 && dataParada < diasDaSemana[0]) startIdx = 0;
-                    
                     let endIdx = diasDaSemana.findIndex(d => d.getTime() === dataFimReal.getTime());
                     if (endIdx === -1 && dataFimReal > diasDaSemana[6]) endIdx = 6;
-                    
                     const spanDays = (endIdx - startIdx) + 1;
 
                     return (
@@ -388,7 +345,6 @@ const Programacao = () => {
                                 style={{ width: `calc(${spanDays * 100}% + ${(spanDays - 1)}px - 16px)` }}
                                 onClick={() => abrirEdicao(item)}
                               >
-                                {/* BARRA VISUAL */}
                                 <div className="h-full w-full bg-gradient-to-r from-[#0f4c81] to-[#10b981] rounded-2xl shadow-md p-4 text-white flex items-center justify-between border-2 border-white/20 print:border-black print:text-black print:bg-none print:border-2 hover:brightness-110 hover:shadow-lg transition-all relative overflow-hidden">
                                   <div className="flex flex-col truncate pr-6">
                                     <div className="flex items-center gap-2">
@@ -401,15 +357,12 @@ const Programacao = () => {
                                     <Edit3 size={18} />
                                   </div>
                                 </div>
-
-                                {/* TOOLTIP CORRIGIDO (Abre para baixo com top-full e mt-2) */}
                                 <div className="hidden group-hover:block absolute top-full left-4 mt-2 w-64 bg-slate-900 text-white text-xs rounded-xl shadow-xl p-3 z-[100] pointer-events-none print:hidden">
                                    <div className="font-black text-emerald-400 mb-1 uppercase">{item.tipo} - {item.falha}</div>
                                    <div><strong className="text-slate-400">Parada:</strong> {new Date(item.data_parada).toLocaleDateString()}</div>
                                    <div><strong className="text-slate-400">Fim Real/Prev:</strong> {dataFimReal.toLocaleDateString()}</div>
                                    <div className="mt-1 pt-1 border-t border-slate-700 italic text-slate-300">Resp: {item.responsavel}</div>
                                 </div>
-
                               </div>
                             )}
                           </td>
@@ -420,65 +373,10 @@ const Programacao = () => {
                 </tbody>
               </table>
             </div>
-
-            {/* RESUMO DETALHADO (OCULTO NA TELA, VISÍVEL APENAS NA IMPRESSÃO) */}
-            <div className="hidden print:block mt-8" style={{ pageBreakBefore: 'always' }}>
-               <h3 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm mb-4 border-b-2 border-slate-200 pb-2">
-                 Detalhamento Técnico da Semana
-               </h3>
-               <div className="grid grid-cols-2 gap-4">
-                 {itensDaSemana.map(item => {
-                   const bgStatus = item.situacao === 'FINALIZADO' ? '#d1fae5' : (item.situacao === 'EM ANDAMENTO' ? '#fef3c7' : '#f1f5f9');
-                   const textStatus = item.situacao === 'FINALIZADO' ? '#047857' : (item.situacao === 'EM ANDAMENTO' ? '#b45309' : '#475569');
-
-                   return (
-                     <div 
-                       key={`det-${item.id}`} 
-                       className="p-4 rounded-xl border-2 border-slate-200 h-auto" 
-                       style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
-                     >
-                       <div className="flex justify-between items-start mb-2">
-                          <span className="font-black text-[#0f4c81] text-sm uppercase">{item.placa}</span>
-                          <span 
-                            className="text-[9px] font-black uppercase px-2 py-1 rounded print-color-force" 
-                            style={{ 
-                              backgroundColor: bgStatus, 
-                              color: textStatus,
-                              WebkitPrintColorAdjust: 'exact',
-                              printColorAdjust: 'exact'
-                            }}
-                          >
-                            {item.situacao}
-                          </span>
-                       </div>
-                       <div className="text-[10px] font-bold text-slate-500 mb-2 uppercase">
-                          OS: {item.os || 'N/A'} | Resp: {item.responsavel || 'N/D'}
-                       </div>
-                       
-                       {/* AQUI ESTÁ A CORREÇÃO DO TEXTO: break-words, whitespace-pre-wrap, h-auto, w-full */}
-                       <div 
-                         className="p-3 rounded-lg text-[10px] text-slate-800 border border-slate-200 h-auto w-full overflow-hidden print-color-force" 
-                         style={{ 
-                           backgroundColor: '#f8fafc',
-                           WebkitPrintColorAdjust: 'exact',
-                           printColorAdjust: 'exact'
-                         }}
-                       >
-                          <strong className="text-red-600 uppercase">{item.tipo} - {item.falha}</strong><br/> 
-                          <div className="italic mt-1 whitespace-pre-wrap break-words w-full">
-                            {item.observacoes || 'Sem observações registradas.'}
-                          </div>
-                       </div>
-                     </div>
-                   );
-                 })}
-               </div>
-            </div>
           </div>
         )}
       </main>
 
-      {/* MODAL EXPORTAR / EMAIL */}
       {modalExportarAberto && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden">
           <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
@@ -487,67 +385,35 @@ const Programacao = () => {
               <button onClick={() => setModalExportarAberto(false)} className="hover:bg-white/20 p-2 rounded-full transition"><X size={20}/></button>
             </div>
             <div className="p-8 space-y-6">
-              
-              {/* ÁREA DE MÚLTIPLA SELEÇÃO DE FILIAIS */}
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">
-                  1. Selecione as Unidades (Clique para marcar):
-                </label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">1. Selecione as Unidades:</label>
                 <div className="flex flex-wrap gap-2">
                   {['TODAS', ...FILIAIS].map(f => (
-                    <button
-                      key={f}
-                      onClick={() => {
-                        if (f === 'TODAS') {
-                          setFiliaisExportacao(['TODAS']);
-                        } else {
+                    <button key={f} onClick={() => {
+                        if (f === 'TODAS') setFiliaisExportacao(['TODAS']);
+                        else {
                           const semTodas = filiaisExportacao.filter(item => item !== 'TODAS');
-                          if (semTodas.includes(f)) {
-                            // Se já tem, remove
-                            setFiliaisExportacao(semTodas.filter(item => item !== f));
-                          } else {
-                            // Se não tem, adiciona
-                            setFiliaisExportacao([...semTodas, f]);
-                          }
+                          setFiliaisExportacao(semTodas.includes(f) ? semTodas.filter(item => item !== f) : [...semTodas, f]);
                         }
                       }}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all border-2 ${
-                        filiaisExportacao.includes(f) 
-                        ? 'bg-[#0f4c81] border-[#0f4c81] text-white shadow-md' 
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
-                      }`}
-                    >
-                      {f}
-                    </button>
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all border-2 ${filiaisExportacao.includes(f) ? 'bg-[#0f4c81] border-[#0f4c81] text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}
+                    > {f} </button>
                   ))}
                 </div>
               </div>
-
               <div className="border-t border-slate-100 pt-6">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">2. E-mail de Destino:</label>
-                <input 
-                  type="email" 
-                  placeholder="exemplo@deicmar.com.br" 
-                  value={destinatariosEmail} 
-                  onChange={e => setDestinatariosEmail(e.target.value)} 
-                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-medium text-slate-700 outline-none focus:border-[#10b981]"
-                />
+                <input type="email" placeholder="exemplo@deicmar.com.br" value={destinatariosEmail} onChange={e => setDestinatariosEmail(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-medium text-slate-700 outline-none focus:border-[#10b981]" />
               </div>
-
               <div className="grid grid-cols-2 gap-4 pt-2">
-                <button onClick={() => { setModalExportarAberto(false); setTimeout(() => window.print(), 300); }} className="p-4 bg-slate-100 hover:bg-[#0f4c81] hover:text-white text-[#0f4c81] rounded-2xl font-black uppercase tracking-widest text-xs flex flex-col items-center gap-2 transition-all shadow-sm">
-                  <Printer size={24}/> Imprimir PDF
-                </button>
-                <button onClick={dispararEmail} className="p-4 bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-2xl font-black uppercase tracking-widest text-xs flex flex-col items-center gap-2 transition-all shadow-sm">
-                  <Mail size={24}/> Enviar E-mail
-                </button>
+                <button onClick={() => { setModalExportarAberto(false); setTimeout(() => window.print(), 300); }} className="p-4 bg-slate-100 hover:bg-[#0f4c81] hover:text-white text-[#0f4c81] rounded-2xl font-black uppercase tracking-widest text-xs flex flex-col items-center gap-2 transition-all shadow-sm"> <Printer size={24}/> Imprimir PDF </button>
+                <button onClick={dispararEmail} className="p-4 bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-2xl font-black uppercase tracking-widest text-xs flex flex-col items-center gap-2 transition-all shadow-sm"> <Mail size={24}/> Enviar E-mail </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE CADASTRO / EDIÇÃO */}
       {modalAberto && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto print:hidden">
           <div className="bg-white w-full max-w-5xl rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 my-8">
@@ -555,9 +421,7 @@ const Programacao = () => {
               <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2"><Wrench size={20} /> {itemEditando ? 'Editar O.S.' : 'Nova Ordem de Serviço'}</h2>
               <button onClick={() => setModalAberto(false)} className="hover:bg-white/20 p-2 rounded-full transition"><X size={20}/></button>
             </div>
-            
             <div className="p-8 grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* LINHA 1 */}
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Placa / Tag</label>
                 <input type="text" value={formData.placa} onChange={e => setFormData({...formData, placa: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-black uppercase focus:border-[#10b981] outline-none" />
@@ -578,8 +442,6 @@ const Programacao = () => {
                   {COLUNAS_KANBAN.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-
-              {/* LINHA 2 */}
               <div className="md:col-span-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block text-red-500">Tipo de Manutenção</label>
                 <select value={formData.tipo} onChange={e => setFormData({...formData, tipo: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none">
@@ -592,8 +454,6 @@ const Programacao = () => {
                   {FALHAS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-
-              {/* LINHA 3 */}
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block flex items-center gap-1"><Clock size={12}/> Data Parada</label>
                 <input type="datetime-local" value={formData.data_parada} onChange={e => setFormData({...formData, data_parada: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none text-xs" />
@@ -620,8 +480,6 @@ const Programacao = () => {
                   </select>
                 </div>
               </div>
-
-              {/* LINHA 4 */}
               <div className="md:col-span-3">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Observações do Serviço</label>
                 <textarea value={formData.observacoes} onChange={e => setFormData({...formData, observacoes: e.target.value})} rows="2" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none resize-none" placeholder="Detalhes..." />
@@ -631,7 +489,6 @@ const Programacao = () => {
                 <input type="text" value={formData.responsavel} onChange={e => setFormData({...formData, responsavel: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none" placeholder="Mecânico" />
               </div>
             </div>
-
             <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4 justify-end">
               <button onClick={() => setModalAberto(false)} className="px-6 py-3 text-slate-500 font-bold hover:bg-slate-200 rounded-xl">Cancelar</button>
               <button onClick={handleSalvar} className="px-8 py-3 bg-[#0f4c81] text-white font-black uppercase tracking-widest rounded-xl shadow-lg hover:scale-105 transition-transform">Salvar Programação</button>
@@ -639,85 +496,6 @@ const Programacao = () => {
           </div>
         </div>
       )}
-
-      <style>{`
-        @media print {
-          /* Configuração da Página */
-          @page { 
-            size: landscape; 
-            margin: 10mm; 
-          }
-
-          body { 
-            background: white !important; 
-            -webkit-print-color-adjust: exact; 
-            print-color-adjust: exact; 
-          }
-
-          /* Esconde elementos desnecessários */
-          header, .print\:hidden, button, select { 
-            display: none !important; 
-          }
-
-          /* Layout do Relatório */
-          .report-header {
-            display: flex !important;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            margin-bottom: 30px;
-            background: linear-gradient(to right, #0f4c81, #10b981) !important;
-            color: white !important;
-            border-radius: 15px;
-          }
-
-          .report-logo {
-            height: 60px;
-            width: auto;
-            background: white;
-            padding: 5px;
-            border-radius: 8px;
-          }
-
-          .report-title {
-            font-size: 24pt;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: -1px;
-          }
-
-          /* Ajuste da Tabela Gantt no Papel */
-          table { 
-            width: 100% !important; 
-            border-collapse: collapse !important;
-          }
-          
-          th { 
-            background-color: #f1f5f9 !important; 
-            color: #0f4c81 !important;
-            border: 1px solid #e2e8f0 !important;
-          }
-
-          td { 
-            border: 1px solid #f1f5f9 !important; 
-          }
-
-          /* Detalhamento Técnico */
-          .tech-details-grid {
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-top: 30px;
-          }
-
-          .tech-card {
-            border-left: 5px solid #0f4c81 !important;
-            padding: 10px;
-            background: #f8fafc !important;
-            page-break-inside: avoid;
-          }
-        }
-      `}</style>
     </div>
   );
 };
