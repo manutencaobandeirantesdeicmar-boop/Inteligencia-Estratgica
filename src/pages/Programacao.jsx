@@ -246,6 +246,11 @@ const Programacao = () => {
                             <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-md">{item.os}</span>
                           </div>
                           <p className="text-[11px] font-black text-red-500 mb-3 uppercase tracking-widest">{item.tipo} • {item.falha}</p>
+
+                          <div className="flex items-center gap-1.5 mb-3 opacity-80">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Responsável:</span>
+                          <span className="text-[10px] font-bold text-[#0f4c81] uppercase">{item.responsavel || 'Não atribuído'}</span>
+                        </div>
                           <div className="bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200 mb-3 line-clamp-2 min-h-[44px]">
                              <p className="text-[11px] text-slate-500 font-bold italic">"{item.observacoes || 'Sem observações'}"</p>
                           </div>
