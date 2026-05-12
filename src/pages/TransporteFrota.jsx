@@ -3,23 +3,24 @@ import { supabaseFrota } from '../services/supabaseFrota-config';
 import { useNavigate } from 'react-router-dom';
 import { 
   Award as Trophy, Truck, Calendar, Filter, ChevronLeft, 
-  Star as Medal, Package, Clock, Award
+  Star as Medal, Package, Clock, Award, FileDown
 } from 'lucide-react';
+
+// Importações para o PDF
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const TransporteFrota = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [rankingData, setRankingData] = useState([]);
-  
   const [filtroMes, setFiltroMes] = useState('TODOS');
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
-
-  // Buscamos apenas os nomes de meses e tipos para os filtros
   const [opcoesFiltros, setOpcoesFiltros] = useState({ meses: [], tipos: [] });
 
+  // --- CARREGAMENTO DE DADOS ---
   useEffect(() => {
     const fetchFiltros = async () => {
-      // CORREÇÃO: Adicionado o .order() para pegar sempre as viagens mais recentes primeiro!
       const { data } = await supabaseFrota
         .from('minhas_viagens')
         .select('mes, tipo')
@@ -35,7 +36,6 @@ const TransporteFrota = () => {
     fetchFiltros();
   }, []);
 
-  // --- BUSCA DO RANKING VIA RPC (Processamento no Banco) ---
   useEffect(() => {
     const fetchRanking = async () => {
       setLoading(true);
@@ -44,7 +44,6 @@ const TransporteFrota = () => {
           p_mes: filtroMes,
           p_tipo: filtroTipo
         });
-
         if (error) throw error;
         setRankingData(data || []);
       } catch (error) {
@@ -53,11 +52,9 @@ const TransporteFrota = () => {
         setLoading(false);
       }
     };
-
     fetchRanking();
   }, [filtroMes, filtroTipo]);
 
-  // Agrupa os dados que vieram do banco por Turno para a interface
   const rankingPorTurno = useMemo(() => {
     const grupos = {};
     rankingData.forEach(item => {
@@ -65,14 +62,103 @@ const TransporteFrota = () => {
       if (!grupos[turno]) grupos[turno] = [];
       grupos[turno].push({ nome: item.motorista_nome, total: item.total_viagens });
     });
-
-    // Ordenação (EXTRA = menor melhor | Geral = maior melhor)
     Object.keys(grupos).forEach(t => {
       grupos[t].sort((a, b) => filtroTipo === 'EXTRA' ? a.total - b.total : b.total - a.total);
     });
-
     return grupos;
   }, [rankingData, filtroTipo]);
+
+  // --- LÓGICA DE GERAÇÃO DO PDF ---
+  const exportarPDF = () => {
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const azulMarinho = [15, 76, 129];
+    const verdeEsmeralda = [16, 185, 129];
+    
+    // 1. Cabeçalho Estilizado
+    doc.setFillColor(...azulMarinho);
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text('RANKING OPERACIONAL - FROTA', 15, 20);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`RELATÓRIO: ${filtroTipo} | MÊS: ${filtroMes}`, 15, 28);
+    doc.text(`EMITIDO EM: ${new Date().toLocaleDateString('pt-BR')}`, 15, 33);
+
+    // Linha divisória verde
+    doc.setDrawColor(...verdeEsmeralda);
+    doc.setLineWidth(1.5);
+    doc.line(0, 40, 210, 40);
+
+    // 2. Lógica de Colunas
+    let yPos = 50;
+    const turnos = Object.entries(rankingPorTurno);
+    
+    // Vamos iterar de 2 em 2 turnos para criar as colunas
+    for (let i = 0; i < turnos.length; i += 2) {
+      const turnoEsquerda = turnos[i];
+      const turnoDireita = turnos[i + 1];
+
+      // Título da Coluna Esquerda
+      doc.setTextColor(...azulMarinho);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`TURNO: ${turnoEsquerda[0]}`, 15, yPos);
+
+      // Tabela Esquerda
+      autoTable(doc, {
+        startY: yPos + 5,
+        margin: { left: 15, right: 110 }, // Limita a largura para a metade
+        head: [['POS', 'MOTORISTA', 'VIAGENS']],
+        body: turnoEsquerda[1].map((m, idx) => [
+          `${idx + 1}º`,
+          m.nome,
+          m.total
+        ]),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: azulMarinho, textColor: 255 },
+        columnStyles: { 
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
+            2: { halign: 'center', fontStyle: 'bold', textColor: filtroTipo === 'EXTRA' ? [225, 29, 72] : verdeEsmeralda } 
+        },
+        didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 0) {
+                if (data.row.index === 0) data.cell.styles.fillColor = [254, 249, 195]; // Ouro
+                if (data.row.index === 1) data.cell.styles.fillColor = [241, 245, 249]; // Prata
+            }
+        }
+      });
+
+      // Se existir um turno para a direita
+      if (turnoDireita) {
+        doc.text(`TURNO: ${turnoDireita[0]}`, 110, yPos);
+        autoTable(doc, {
+          startY: yPos + 5,
+          margin: { left: 110, right: 15 },
+          head: [['POS', 'MOTORISTA', 'VIAGENS']],
+          body: turnoDireita[1].map((m, idx) => [
+            `${idx + 1}º`,
+            m.nome,
+            m.total
+          ]),
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [71, 85, 105], textColor: 255 },
+          columnStyles: { 
+            0: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
+            2: { halign: 'center', fontStyle: 'bold', textColor: filtroTipo === 'EXTRA' ? [225, 29, 72] : verdeEsmeralda } 
+          }
+        });
+      }
+
+      // Atualiza yPos para o próximo par de turnos (baseado na maior tabela desenhada)
+      yPos = doc.lastAutoTable.finalY + 15;
+    }
+
+    doc.save(`Ranking_Frota_${filtroMes}_${filtroTipo}.pdf`);
+  };
 
   const renderizarPodio = (posicao) => {
     if (posicao === 0) return <div className="bg-yellow-100 text-yellow-600 p-2 rounded-full shadow-sm"><Trophy size={20} /></div>;
@@ -91,6 +177,14 @@ const TransporteFrota = () => {
             <p className="text-xs font-bold uppercase tracking-widest opacity-80 mt-1">Ranking Total da Operação</p>
           </div>
         </div>
+        
+        {/* BOTÃO DE EXPORTAR PDF */}
+        <button 
+          onClick={exportarPDF}
+          className="bg-white text-[#0f4c81] px-5 py-2.5 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all"
+        >
+          <FileDown size={18} /> Exportar PDF
+        </button>
       </header>
 
       <main className="p-6 max-w-7xl mx-auto space-y-6">
@@ -169,7 +263,6 @@ const TransporteFrota = () => {
           </div>
         )}
       </main>
-      <style>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }`}</style>
     </div>
   );
 };
