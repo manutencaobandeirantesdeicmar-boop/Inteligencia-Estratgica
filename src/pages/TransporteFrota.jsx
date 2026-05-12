@@ -17,6 +17,18 @@ const TransporteFrota = () => {
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
   const [opcoesFiltros, setOpcoesFiltros] = useState({ meses: [], tipos: [] });
 
+  // Helper para converter HSL para RGB (necessário para o jsPDF)
+  const hslToRgb = (h, s, l) => {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = n => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color);
+    };
+    return [f(0), f(8), f(4)];
+  };
+
   useEffect(() => {
     const fetchFiltros = async () => {
       const { data } = await supabaseFrota
@@ -71,7 +83,6 @@ const TransporteFrota = () => {
     const azulMarinho = [15, 76, 129];
     const verdeEsmeralda = [16, 185, 129];
     
-    // Cabeçalho
     doc.setFillColor(...azulMarinho);
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
@@ -89,7 +100,6 @@ const TransporteFrota = () => {
     let yPos = 50;
     const turnos = Object.entries(rankingPorTurno);
     
-    // Processamento de 2 em 2 turnos para colunas
     for (let i = 0; i < turnos.length; i += 2) {
       const tEsquerda = turnos[i];
       const tDireita = turnos[i + 1];
@@ -97,7 +107,11 @@ const TransporteFrota = () => {
       let finalYEsquerda = yPos;
       let finalYDireita = yPos;
 
-      // LADO ESQUERDO
+      // --- LÓGICA DE CORES PARA A ESQUERDA ---
+      const minE = Math.min(...tEsquerda[1].map(m => m.total));
+      const maxE = Math.max(...tEsquerda[1].map(m => m.total));
+      const rangeE = maxE - minE;
+
       doc.setTextColor(...azulMarinho);
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
@@ -112,15 +126,30 @@ const TransporteFrota = () => {
         headStyles: { fillColor: azulMarinho },
         columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 2: { halign: 'center', fontStyle: 'bold' } },
         didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 0 && data.row.index === 0) {
-            data.cell.styles.fillColor = [254, 249, 195];
+          if (data.section === 'body') {
+            const total = data.row.raw[2];
+            if (filtroTipo === 'EXTRA') {
+              const ratio = rangeE === 0 ? 0 : (total - minE) / rangeE;
+              const hue = 120 - (ratio * 120);
+              const bgColor = hslToRgb(hue, 85, 96);
+              const txtColor = hslToRgb(hue, 75, 45);
+              data.cell.styles.fillColor = bgColor;
+              data.cell.styles.textColor = txtColor;
+            } else if (data.column.index === 0 && data.row.index === 0) {
+              data.cell.styles.fillColor = [254, 249, 195];
+            }
           }
         }
       });
       finalYEsquerda = doc.lastAutoTable.finalY;
 
-      // LADO DIREITO
+      // --- LÓGICA DE CORES PARA A DIREITA ---
       if (tDireita) {
+        const minD = Math.min(...tDireita[1].map(m => m.total));
+        const maxD = Math.max(...tDireita[1].map(m => m.total));
+        const rangeD = maxD - minD;
+
+        doc.setTextColor(...azulMarinho);
         doc.text(`TURNO: ${tDireita[0]}`, 110, yPos);
         autoTable(doc, {
           startY: yPos + 4,
@@ -129,22 +158,32 @@ const TransporteFrota = () => {
           body: tDireita[1].map((m, idx) => [`${idx + 1}º`, m.nome, m.total]),
           styles: { fontSize: 7, cellPadding: 1.5 },
           headStyles: { fillColor: [71, 85, 105] },
-          columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 2: { halign: 'center', fontStyle: 'bold' } }
+          columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 2: { halign: 'center', fontStyle: 'bold' } },
+          didParseCell: (data) => {
+            if (data.section === 'body') {
+              const total = data.row.raw[2];
+              if (filtroTipo === 'EXTRA') {
+                const ratio = rangeD === 0 ? 0 : (total - minD) / rangeD;
+                const hue = 120 - (ratio * 120);
+                const bgColor = hslToRgb(hue, 85, 96);
+                const txtColor = hslToRgb(hue, 75, 45);
+                data.cell.styles.fillColor = bgColor;
+                data.cell.styles.textColor = txtColor;
+              }
+            }
+          }
         });
         finalYDireita = doc.lastAutoTable.finalY;
       }
 
-      // O novo Y será o maior valor entre as duas tabelas desenhadas
       yPos = Math.max(finalYEsquerda, finalYDireita) + 15;
-
-      // Verificação de quebra de página
       if (yPos > 260 && i + 2 < turnos.length) {
         doc.addPage();
         yPos = 20;
       }
     }
 
-    doc.save(`Ranking_Frota_${filtroMes}.pdf`);
+    doc.save(`Ranking_Frota_${filtroMes}_${filtroTipo}.pdf`);
   };
 
   const renderizarPodio = (posicao) => {
