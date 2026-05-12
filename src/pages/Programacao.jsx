@@ -458,7 +458,7 @@ const Programacao = () => {
         <div className="border-b-4 border-[#0f4c81] pb-4 mb-6 flex justify-between items-end">
           <div>
             <h1 className="text-2xl font-black text-[#0f4c81] uppercase tracking-tighter">Relatório de Programação</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bandeirantes Deicmar • Status Diário</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bandeirantes Deicmar •  Manutenção de Equipamentos</p>
           </div>
           <div className="text-right text-[9px] font-bold text-slate-400 uppercase">
             <div>Unidade: {filiaisExportacao.join(' / ')}</div>
