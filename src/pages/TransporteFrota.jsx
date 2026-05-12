@@ -220,6 +220,7 @@ const TransporteFrota = () => {
               Atualizado em: {ultimaAtualizacao}
             </p>
           </div>
+            
         </div>
         <button onClick={exportarPDF} className="bg-white text-[#0f4c81] p-2.5 md:px-5 md:py-2.5 rounded-2xl font-black uppercase text-[10px] md:text-xs tracking-widest flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all">
           <FileDown size={18} /> <span className="hidden sm:inline">Exportar PDF</span>
