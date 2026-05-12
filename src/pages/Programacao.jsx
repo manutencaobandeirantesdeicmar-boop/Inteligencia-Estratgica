@@ -501,19 +501,33 @@ const Programacao = () => {
               </thead>
               <tbody>
                 {itensParaExportacao.map((item) => {
+                  // Normalização rigorosa das datas para comparação (zerando horas)
                   const dataP = new Date(item.data_parada); dataP.setHours(0,0,0,0);
                   const dataF = item.data_final ? new Date(item.data_final) : (item.prazo ? new Date(item.prazo) : dataP);
                   dataF.setHours(0,0,0,0);
 
                   return (
                     <tr key={item.id} className="border-b border-slate-100">
-                      <td className="p-2 font-black text-[#0f4c81] border-r border-slate-200 bg-white">{item.placa}</td>
+                      <td className="p-2 font-black text-[#0f4c81] border-r border-slate-200 bg-white whitespace-nowrap">
+                        {item.placa}
+                      </td>
                       {diasDaSemana.map((dia, idx) => {
-                        const estaAtivo = dia >= dataP && dia <= dataF;
+                        // Compara os timestamps para evitar erro de fuso horário/milissegundos
+                        const dTimestamp = dia.getTime();
+                        const estaAtivo = dTimestamp >= dataP.getTime() && dTimestamp <= dataF.getTime();
+                        
                         return (
-                          <td key={idx} className="p-0 border-r border-slate-100 h-6">
+                          <td key={idx} className="p-0 border-r border-slate-100 h-10 relative min-w-[60px]">
                             {estaAtivo && (
-                              <div className={`h-full w-full ${item.situacao === 'FINALIZADO' ? 'bg-emerald-500/30' : 'bg-[#0f4c81]/30'}`}></div>
+                              <div className={`absolute inset-0.5 flex items-center justify-center rounded-sm px-0.5 text-center leading-[1] ${
+                                item.situacao === 'FINALIZADO' 
+                                ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-300' 
+                                : 'bg-[#0f4c81]/10 text-[#0f4c81] border border-[#0f4c81]/20'
+                              }`}>
+                                <span className="text-[6px] font-black uppercase break-words">
+                                  {item.falha}
+                                </span>
+                              </div>
                             )}
                           </td>
                         );
