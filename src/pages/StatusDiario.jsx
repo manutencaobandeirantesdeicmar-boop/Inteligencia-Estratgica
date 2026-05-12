@@ -20,6 +20,45 @@ const StatusDiario = () => {
   const [novaPrevisao, setNovaPrevisao] = useState(''); 
   const [destinatarios, setDestinatarios] = useState('carina.ribeiro@band-deicmar.com.br');
 
+  // Novos estados para Cadastro e Transferência
+  const [modalGestaoAberto, setModalGestaoAberto] = useState(false);
+  const [abaGestao, setAbaGestao] = useState('equipamento'); // 'equipamento', 'caminhao' ou 'transferencia'
+  const [formGestao, setFormGestao] = useState({
+    // Campos comuns e específicos
+    id: '', tag: '', frota: '', placa: '', modelo: '', 
+    familia: '', ccusto: '', local: '', operacao: '', descricao_modelo: ''
+  });
+
+  const handleSalvarGestao = async () => {
+    setLoading(true);
+    try {
+      if (abaGestao === 'transferencia') {
+        // Lógica de Transferência (Update)
+        const { error } = await supabase
+          .from('equipamentos')
+          .update({ local: formGestao.local, ultimaAtualizacao: new Date() })
+          .eq('tag', formGestao.tag);
+        if (error) throw error;
+        alert("✅ Equipamento transferido com sucesso!");
+      } else {
+        const tabela = abaGestao === 'equipamento' ? 'equipamentos' : 'caminhoes';
+        const idAtivo = abaGestao === 'equipamento' ? formGestao.tag : formGestao.frota;
+        
+        const { error } = await supabase
+          .from(tabela)
+          .insert([{ ...formGestao, id: idAtivo, status: 'Liberada' }]);
+        if (error) throw error;
+        alert(`✅ ${abaGestao.toUpperCase()} cadastrado com sucesso!`);
+      }
+      setModalGestaoAberto(false);
+      window.location.reload(); // Recarrega para atualizar a lista
+    } catch (err) {
+      alert("Erro na operação: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -181,6 +220,10 @@ const StatusDiario = () => {
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => { setAbaGestao(abaAtiva === 'equipamentos' ? 'equipamento' : 'caminhao'); setModalGestaoAberto(true); }}
+          className="bg-[#10b981] text-white p-2 md:px-4 rounded-lg flex items-center gap-2 text-xs md:text-sm font-bold shadow-md hover:bg-emerald-600 transition" >
+        <PlusCircle size={16} /> <span className="hidden sm:inline">Novo / Transferir</span>
+        </button>
            <button onClick={() => setModalEnvioAberto(true)} className="bg-white text-[#0f4c81] p-2 md:px-4 rounded-lg flex items-center gap-2 text-xs md:text-sm font-bold shadow-md hover:bg-slate-100 transition">
              <Share2 size={16} className="md:w-[18px] md:h-[18px]" /> <span className="hidden sm:inline">Enviar Status</span>
            </button>
@@ -314,6 +357,94 @@ const StatusDiario = () => {
           )}
         </div>
       </main>
+
+      {/* MODAL GESTÃO DE ATIVOS */}
+      {modalGestaoAberto && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 md:p-4">
+          <div className="bg-white w-full max-w-lg rounded-t-[2.5rem] md:rounded-3xl shadow-2xl overflow-hidden animate-fade-in">
+            <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-6 text-white flex justify-between items-center">
+              <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
+                <Truck size={20} /> Gestão de Ativos
+              </h2>
+              <button onClick={() => setModalGestaoAberto(false)} className="hover:bg-white/20 p-2 rounded-full transition"><X size={24}/></button>
+            </div>
+
+            {/* ABAS DO MODAL */}
+            <div className="flex bg-slate-100 p-1 m-6 rounded-xl">
+              <button onClick={() => setAbaGestao('equipamento')} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'equipamento' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Novo Equip.</button>
+              <button onClick={() => setAbaGestao('caminhao')} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'caminhao' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Novo Caminhão</button>
+              <button onClick={() => setAbaGestao('transferencia')} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'transferencia' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Transferir</button>
+            </div>
+
+            <div className="px-6 pb-8 space-y-4 max-h-[60vh] overflow-y-auto">
+              {abaGestao === 'transferencia' ? (
+                <>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Equipamento (Tag)</label>
+                    <select 
+                      onChange={(e) => setFormGestao({...formGestao, tag: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]"
+                    >
+                      <option value="">Selecione o Equipamento...</option>
+                      {dados.filter(d => d.tag).map(d => <option key={d.id} value={d.tag}>{d.tag} - {d.descricao_modelo}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Novo Local (Destino)</label>
+                    <select 
+                      onChange={(e) => setFormGestao({...formGestao, local: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#10b981]"
+                    >
+                      <option value="">Selecione o Destino...</option>
+                      <option value="BK">BK</option><option value="CLIA">CLIA</option><option value="IPA">IPA</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
+                      {abaGestao === 'equipamento' ? 'Tag do Equipamento' : 'Prefixo da Frota'}
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: RS-102 ou 5020"
+                      onChange={(e) => setFormGestao(abaGestao === 'equipamento' ? {...formGestao, tag: e.target.value.toUpperCase()} : {...formGestao, frota: e.target.value.toUpperCase()})}
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" 
+                    />
+                  </div>
+                  {abaGestao === 'caminhao' && (
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Placa</label>
+                      <input type="text" placeholder="ABC-1234" onChange={(e) => setFormGestao({...formGestao, placa: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" />
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Modelo</label>
+                    <input type="text" onChange={(e) => setFormGestao({...formGestao, modelo: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Unidade/Operação</label>
+                    <select 
+                      onChange={(e) => setFormGestao(abaGestao === 'equipamento' ? {...formGestao, local: e.target.value} : {...formGestao, operacao: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]"
+                    >
+                      <option value="BK">BK</option><option value="CLIA">CLIA</option><option value="IPA">IPA</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+              
+              <button 
+                onClick={handleSalvarGestao}
+                className="w-full py-4 bg-[#0f4c81] text-white font-black uppercase tracking-widest rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : "Confirmar Operação"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE ENVIO: Ajustado para telas pequenas */}
       {modalEnvioAberto && (
