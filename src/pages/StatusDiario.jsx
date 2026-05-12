@@ -241,7 +241,7 @@ const StatusDiario = () => {
               <span className="md:hidden text-[10px] font-black text-slate-400 uppercase">Unidade:</span>
               <select value={filtroUnidade} onChange={(e) => setFiltroUnidade(e.target.value)} className="bg-transparent font-black text-[#0f4c81] outline-none text-xs md:text-sm cursor-pointer uppercase">
                 <option value="TODAS">TODAS AS UNIDADES</option>
-                <option value="BK">BK</option><option value="CLIA">CLIA</option><option value="IPA">IPA</option>
+                <option value="BK">BK</option><option value="CLIA">CLIA</option><option value="IPA">IPA</option><option value="FROTA">FROTA</option>
               </select>
             </div>
         </div>
