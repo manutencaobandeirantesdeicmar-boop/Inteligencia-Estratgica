@@ -515,12 +515,7 @@ const Programacao = () => {
       </div>
       {/* --- FIM DO CÓDIGO DE IMPRESSÃO --- */}
 
-    </div> // ESTE É O ÚLTIMO DIV DO COMPONENTE
-  );
-};
-
-export default Programacao;
-    </div>
+    </div> 
   );
 };
 
