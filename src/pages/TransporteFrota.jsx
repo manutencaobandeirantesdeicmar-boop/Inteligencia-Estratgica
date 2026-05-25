@@ -3,7 +3,7 @@ import { supabaseFrota } from '../services/supabaseFrota-config';
 import { useNavigate } from 'react-router-dom';
 import { 
   Award as Trophy, Truck, Calendar, Filter, ChevronLeft, 
-  Star as Medal, Package, Clock, Award, FileDown, X
+  Star as Medal, Package, Clock, Award, FileDown, Plane
 } from 'lucide-react';
 
 import jsPDF from 'jspdf';
@@ -13,7 +13,7 @@ const TransporteFrota = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [rankingData, setRankingData] = useState([]);
-  const [motoristasBase, setMotoristasBase] = useState([]); // Novo estado para a base de motoristas
+  const [motoristasBase, setMotoristasBase] = useState([]); 
   const [filtroMes, setFiltroMes] = useState('TODOS');
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
   const [opcoesFiltros, setOpcoesFiltros] = useState({ meses: [], tipos: [] });
@@ -29,7 +29,6 @@ const TransporteFrota = () => {
     return [f(0), f(8), f(4)];
   };
 
-  // 1. Busca Filtros
   useEffect(() => {
     const fetchFiltros = async () => {
       const { data } = await supabaseFrota
@@ -47,7 +46,6 @@ const TransporteFrota = () => {
     fetchFiltros();
   }, []);
 
-  // 2. Busca Base de Motoristas Cadastrados
   useEffect(() => {
     const fetchMotoristasBase = async () => {
       const { data, error } = await supabaseFrota
@@ -61,7 +59,6 @@ const TransporteFrota = () => {
     fetchMotoristasBase();
   }, []);
 
-  // 3. Busca o Ranking de Viagens
   useEffect(() => {
     const fetchRanking = async () => {
       setLoading(true);
@@ -81,61 +78,89 @@ const TransporteFrota = () => {
     fetchRanking();
   }, [filtroMes, filtroTipo]);
 
-  // Merge e Lógica do Ranking
-  const rankingPorTurno = useMemo(() => {
-    const grupos = {};
+  // Função para marcar/desmarcar Férias direto na tela
+  const handleToggleFerias = async (motId, isCurrentlyFerias) => {
+    const novoStatus = isCurrentlyFerias ? 'ativo' : 'FÉRIAS';
+    
+    // Atualiza otimisticamente a tela para parecer rápido
+    setMotoristasBase(prev => prev.map(m => m.id === motId ? { ...m, status: novoStatus } : m));
 
-    // A. Mapeia TODOS os motoristas da base oficial (garantindo os zerados)
+    // Atualiza no banco
+    const { error } = await supabaseFrota
+      .from('motoristas_cadastrados')
+      .update({ status: novoStatus })
+      .eq('id', motId);
+
+    if (error) {
+      alert("Erro ao alterar férias: " + error.message);
+      // Reverte em caso de erro
+      setMotoristasBase(prev => prev.map(m => m.id === motId ? { ...m, status: isCurrentlyFerias ? 'FÉRIAS' : 'ativo' } : m));
+    }
+  };
+
+  const rankingPorTurno = useMemo(() => {
+    const grupos = { 'FÉRIAS': [] };
+
+    // A. Mapeia a base oficial
     motoristasBase.forEach(mot => {
-      // IGNORA USUÁRIOS ADMINISTRADORES
       if (mot.admin === true) return;
 
-      const turno = mot.Turno || 'NÃO DEFINIDO';
-      if (!grupos[turno]) grupos[turno] = [];
-
-      // Procura o motorista no resultado das viagens
       const dadosViagem = rankingData.find(r => r.motorista_nome === mot.motorista);
       const totalViagens = dadosViagem ? dadosViagem.total_viagens : 0;
-      
-      // Identifica férias baseado na coluna status
       const estaDeFerias = mot.status && mot.status.toUpperCase() === 'FÉRIAS';
 
-      grupos[turno].push({ 
+      const objMotorista = { 
+        id: mot.id,
         nome: mot.motorista, 
         total: totalViagens,
         ferias: estaDeFerias
-      });
+      };
+
+      if (estaDeFerias) {
+        grupos['FÉRIAS'].push(objMotorista);
+      } else {
+        const turno = mot.Turno || 'NÃO DEFINIDO';
+        if (!grupos[turno]) grupos[turno] = [];
+        grupos[turno].push(objMotorista);
+      }
     });
 
-    // B. Pega motoristas que talvez tenham viagem mas não estejam na base (garantia extra)
+    // B. Pega motoristas fora da base mas com viagens no ranking
     rankingData.forEach(item => {
-      // Garante que mesmo se um admin fez uma viagem, ele não apareça no ranking
       const isAdmin = motoristasBase.some(mot => mot.motorista === item.motorista_nome && mot.admin === true);
       if (isAdmin) return;
 
-      const turno = item.turno_nome || 'NÃO DEFINIDO';
-      if (!grupos[turno]) grupos[turno] = [];
+      const baseMot = motoristasBase.find(m => m.motorista === item.motorista_nome);
+      const estaDeFerias = baseMot && baseMot.status && baseMot.status.toUpperCase() === 'FÉRIAS';
+      const turnoGrupo = estaDeFerias ? 'FÉRIAS' : (item.turno_nome || 'NÃO DEFINIDO');
+
+      if (!grupos[turnoGrupo]) grupos[turnoGrupo] = [];
+      const jaExiste = grupos[turnoGrupo].some(g => g.nome === item.motorista_nome);
       
-      const jaExiste = grupos[turno].some(g => g.nome === item.motorista_nome);
       if (!jaExiste) {
-        grupos[turno].push({ 
+        grupos[turnoGrupo].push({ 
+          id: baseMot ? baseMot.id : null,
           nome: item.motorista_nome, 
           total: item.total_viagens || 0,
-          ferias: false 
+          ferias: estaDeFerias 
         });
       }
     });
 
+    // Remove grupo Férias se estiver vazio
+    if (grupos['FÉRIAS'].length === 0) delete grupos['FÉRIAS'];
+
     // C. Ordenação
     Object.keys(grupos).forEach(t => {
-      grupos[t].sort((a, b) => {
-        if (filtroTipo === 'EXTRA') {
-          // EXTRA: Menor para o Maior (0 no topo)
-          return a.total - b.total; 
-        }
-        // DEFAULT: Maior para o Menor
-        return b.total - a.total; 
-      });
+      if (t === 'FÉRIAS') {
+        // Férias ordena por ordem alfabética
+        grupos[t].sort((a, b) => a.nome.localeCompare(b.nome));
+      } else {
+        grupos[t].sort((a, b) => {
+          if (filtroTipo === 'EXTRA') return a.total - b.total; 
+          return b.total - a.total; 
+        });
+      }
     });
 
     return grupos;
@@ -161,28 +186,35 @@ const TransporteFrota = () => {
     doc.line(0, 40, 210, 40);
 
     let yPos = 50;
-    const turnos = Object.entries(rankingPorTurno);
     
-    for (let i = 0; i < turnos.length; i += 2) {
-      const tEsquerda = turnos[i];
-      const tDireita = turnos[i + 1];
+    // Separa os turnos operacionais das férias para forçar Diurno/Noturno lado a lado
+    const turnosOperacionais = Object.keys(rankingPorTurno).filter(t => t !== 'FÉRIAS').sort();
+    const feriasDados = rankingPorTurno['FÉRIAS'] || [];
+    
+    // Imprime Turnos Operacionais em duas colunas (lado a lado)
+    for (let i = 0; i < turnosOperacionais.length; i += 2) {
+      const nomeEsquerda = turnosOperacionais[i];
+      const nomeDireita = turnosOperacionais[i + 1];
+      const tEsquerda = rankingPorTurno[nomeEsquerda];
+      const tDireita = nomeDireita ? rankingPorTurno[nomeDireita] : null;
+
       let finalYEsquerda = yPos;
       let finalYDireita = yPos;
 
-      const minE = Math.min(...tEsquerda[1].map(m => m.total));
-      const maxE = Math.max(...tEsquerda[1].map(m => m.total));
+      const minE = Math.min(...tEsquerda.map(m => m.total));
+      const maxE = Math.max(...tEsquerda.map(m => m.total));
       const rangeE = maxE - minE;
 
       doc.setTextColor(...azulMarinho);
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      doc.text(`TURNO: ${tEsquerda[0]}`, 15, yPos);
+      doc.text(`TURNO: ${nomeEsquerda}`, 15, yPos);
 
       autoTable(doc, {
         startY: yPos + 4,
         margin: { left: 15, right: 110 },
         head: [['POS', 'MOTORISTA', 'TOTAL']],
-        body: tEsquerda[1].map((m, idx) => [`${idx + 1}º`, m.nome, m.total]),
+        body: tEsquerda.map((m, idx) => [`${idx + 1}º`, m.nome, m.total]),
         styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: azulMarinho },
         columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 2: { halign: 'center', fontStyle: 'bold' } },
@@ -205,16 +237,16 @@ const TransporteFrota = () => {
       finalYEsquerda = doc.lastAutoTable.finalY;
 
       if (tDireita) {
-        const minD = Math.min(...tDireita[1].map(m => m.total));
-        const maxD = Math.max(...tDireita[1].map(m => m.total));
+        const minD = Math.min(...tDireita.map(m => m.total));
+        const maxD = Math.max(...tDireita.map(m => m.total));
         const rangeD = maxD - minD;
         doc.setTextColor(...azulMarinho);
-        doc.text(`TURNO: ${tDireita[0]}`, 110, yPos);
+        doc.text(`TURNO: ${nomeDireita}`, 110, yPos);
         autoTable(doc, {
           startY: yPos + 4,
           margin: { left: 110, right: 15 },
           head: [['POS', 'MOTORISTA', 'TOTAL']],
-          body: tDireita[1].map((m, idx) => [`${idx + 1}º`, m.nome, m.total]),
+          body: tDireita.map((m, idx) => [`${idx + 1}º`, m.nome, m.total]),
           styles: { fontSize: 7, cellPadding: 1.5 },
           headStyles: { fillColor: [71, 85, 105] },
           columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 2: { halign: 'center', fontStyle: 'bold' } },
@@ -235,20 +267,48 @@ const TransporteFrota = () => {
         finalYDireita = doc.lastAutoTable.finalY;
       }
       yPos = Math.max(finalYEsquerda, finalYDireita) + 15;
-      if (yPos > 260 && i + 2 < turnos.length) {
+      
+      // Checa se precisa criar página nova (reserva espaço pra tabela de férias também)
+      if (yPos > 240 && (i + 2 < turnosOperacionais.length || feriasDados.length > 0)) {
         doc.addPage();
         yPos = 20;
       }
     }
+
+    // Imprime Bloco de Férias abaixo dos turnos
+    if (feriasDados.length > 0) {
+      doc.setTextColor(249, 115, 22); // Laranja para Férias
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('MOTORISTAS EM FÉRIAS', 15, yPos);
+
+      autoTable(doc, {
+        startY: yPos + 4,
+        margin: { left: 15, right: 15 },
+        head: [['MOTORISTA', 'STATUS']],
+        body: feriasDados.map(m => [m.nome, 'FÉRIAS']),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [249, 115, 22] }, // Laranja
+        columnStyles: { 1: { halign: 'center', fontStyle: 'bold', textColor: [249, 115, 22] } }
+      });
+    }
+
     doc.save(`Ranking_Frota_${filtroMes}_${filtroTipo}.pdf`);
   };
 
   const renderizarPodio = (posicao) => {
-    if (posicao === 0) return <div className="bg-yellow-100 text-yellow-600 p-1.5 md:p-2 rounded-full shadow-sm"><Trophy size={18} className="md:w-5 md:h-5" /></div>;
-    if (posicao === 1) return <div className="bg-slate-200 text-slate-500 p-1.5 md:p-2 rounded-full shadow-sm"><Medal size={18} className="md:w-5 md:h-5" /></div>;
-    if (posicao === 2) return <div className="bg-amber-100 text-amber-700 p-1.5 md:p-2 rounded-full shadow-sm"><Award size={18} className="md:w-5 md:h-5" /></div>;
-    return <div className="bg-slate-50 text-slate-400 p-2 rounded-full font-black text-[10px] md:text-sm w-8 h-8 md:w-9 md:h-9 flex items-center justify-center border border-slate-200">{posicao + 1}º</div>;
+    if (posicao === 0) return <div className="bg-yellow-100 text-yellow-600 p-1.5 md:p-2 rounded-full shadow-sm flex-shrink-0"><Trophy size={18} className="md:w-5 md:h-5" /></div>;
+    if (posicao === 1) return <div className="bg-slate-200 text-slate-500 p-1.5 md:p-2 rounded-full shadow-sm flex-shrink-0"><Medal size={18} className="md:w-5 md:h-5" /></div>;
+    if (posicao === 2) return <div className="bg-amber-100 text-amber-700 p-1.5 md:p-2 rounded-full shadow-sm flex-shrink-0"><Award size={18} className="md:w-5 md:h-5" /></div>;
+    return <div className="bg-slate-50 text-slate-400 p-2 rounded-full font-black text-[10px] md:text-sm w-8 h-8 md:w-9 md:h-9 flex items-center justify-center border border-slate-200 flex-shrink-0">{posicao + 1}º</div>;
   };
+
+  // Garante que Férias apareça por último na tela, e Diurno/Noturno venham primeiro
+  const turnosOrdenadosTela = Object.keys(rankingPorTurno).sort((a, b) => {
+    if (a === 'FÉRIAS') return 1;
+    if (b === 'FÉRIAS') return -1;
+    return a.localeCompare(b);
+  });
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans relative overflow-x-hidden">
@@ -294,36 +354,46 @@ const TransporteFrota = () => {
           <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-[#10b981]"></div></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-            {Object.entries(rankingPorTurno).map(([turno, motoristasRankeados]) => (
+            {turnosOrdenadosTela.map((turno) => {
+              const motoristasRankeados = rankingPorTurno[turno];
+              const isFeriasGrupo = turno === 'FÉRIAS';
+
+              return (
                 <div key={turno} className="bg-white rounded-[1.5rem] md:rounded-[2rem] shadow-md border border-slate-100 overflow-hidden flex flex-col">
-                  <div className="bg-slate-50 p-4 md:p-6 border-b border-slate-100 flex justify-between items-center">
-                    <h2 className="font-black text-sm md:text-lg text-[#0f4c81] uppercase tracking-widest flex items-center gap-2"><Clock size={18} className="text-[#10b981]" /> {turno}</h2>
-                    <span className="bg-[#10b981]/10 text-[#10b981] font-black text-[9px] md:text-xs px-2 md:px-3 py-1 rounded-full uppercase">{motoristasRankeados.length} Mot.</span>
+                  {/* CABEÇALHO DO TURNO (LARANJA SE FOR FÉRIAS) */}
+                  <div className={`p-4 md:p-6 border-b flex justify-between items-center ${isFeriasGrupo ? 'bg-orange-50 border-orange-100' : 'bg-slate-50 border-slate-100'}`}>
+                    <h2 className={`font-black text-sm md:text-lg uppercase tracking-widest flex items-center gap-2 ${isFeriasGrupo ? 'text-orange-600' : 'text-[#0f4c81]'}`}>
+                      {isFeriasGrupo ? <Plane size={18} className="text-orange-500" /> : <Clock size={18} className="text-[#10b981]" />}
+                      {turno}
+                    </h2>
+                    <span className={`font-black text-[9px] md:text-xs px-2 md:px-3 py-1 rounded-full uppercase ${isFeriasGrupo ? 'bg-orange-100 text-orange-600' : 'bg-[#10b981]/10 text-[#10b981]'}`}>
+                      {motoristasRankeados.length} Mot.
+                    </span>
                   </div>
+                  
                   <div className="p-3 md:p-4 flex-1 overflow-y-auto max-h-[400px] md:max-h-[500px] space-y-2 md:space-y-3 custom-scrollbar">
                     {motoristasRankeados.map((mot, index) => {
                       const isExtra = filtroTipo === 'EXTRA';
                       let estiloCard = {};
-                      let classesCard = "flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl transition-all duration-300 active:scale-95 md:hover:-translate-y-1 md:hover:shadow-md ";
+                      let classesCard = "flex items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl transition-all duration-300 ";
                       let corDoNumero = '';
 
-                      if (isExtra) {
+                      if (isFeriasGrupo) {
+                        classesCard += 'bg-slate-50 border border-slate-100';
+                        corDoNumero = '#cbd5e1'; // Cinza claro (não importa a viagem na férias)
+                      } else if (isExtra) {
                         const minTrips = motoristasRankeados[0]?.total || 0;
                         const maxTrips = motoristasRankeados[motoristasRankeados.length - 1]?.total || 0;
                         const range = maxTrips - minTrips;
-                        
-                        // Evita divisão por zero caso o range seja nulo
                         const ratio = range === 0 ? 0 : (mot.total - minTrips) / range;
                         const hue = 120 - (ratio * 120);
                         
-                        // Destaca com verde vivo perfeito os zerados, os demais ganham degrades progressivos
                         estiloCard = { 
                           background: mot.total === 0 
                             ? `linear-gradient(to right, #f0fdf4, white)` 
                             : `linear-gradient(to right, hsla(${hue}, 85%, 96%, 1), white)`, 
                           borderColor: mot.total === 0 ? '#bbf7d0' : `hsla(${hue}, 80%, 85%, 1)`, 
-                          borderWidth: '1px', 
-                          borderStyle: 'solid' 
+                          borderWidth: '1px', borderStyle: 'solid' 
                         };
                         corDoNumero = mot.total === 0 ? '#16a34a' : `hsl(${hue}, 75%, 45%)`;
                       } else {
@@ -335,36 +405,51 @@ const TransporteFrota = () => {
                       }
 
                       return (
-                        <div key={index} className={classesCard} style={estiloCard}>
+                        <div key={mot.nome} className={classesCard} style={estiloCard}>
                           <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
-                            {renderizarPodio(index)}
+                            {/* Esconde Pódio para Férias */}
+                            {!isFeriasGrupo && renderizarPodio(index)}
+                            
                             <div className="truncate min-w-0 flex-1">
-                              
-                              {/* CONTAINER DE NOME E FÉRIAS */}
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <p className={`font-black uppercase text-xs md:text-sm truncate ${index === 0 && !isExtra ? 'text-yellow-700' : 'text-[#0f4c81]'}`}>
-                                  {mot.nome}
-                                </p>
-                                {mot.ferias && (
-                                  <span className="bg-orange-100 text-orange-600 text-[8px] px-1.5 py-0.5 rounded border border-orange-200 font-black uppercase tracking-widest shadow-sm flex-shrink-0">
-                                    Férias
-                                  </span>
-                                )}
-                              </div>
-
-                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Motorista</p>
+                              <p className={`font-black uppercase text-xs md:text-sm truncate ${index === 0 && !isExtra && !isFeriasGrupo ? 'text-yellow-700' : 'text-[#0f4c81]'}`}>
+                                {mot.nome}
+                              </p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Motorista</p>
                             </div>
                           </div>
-                          <div className="text-right ml-2 flex-shrink-0">
-                            <p className="font-black text-xl md:text-2xl leading-none" style={{ color: corDoNumero }}>{mot.total}</p>
-                            <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{isExtra ? 'Extras' : 'Viagens'}</p>
+
+                          {/* CONTROLES: Botão Férias + Número */}
+                          <div className="flex items-center gap-3 md:gap-5 flex-shrink-0">
+                            {/* Botão de Toggle Férias (só aparece se o motorista tem ID no banco) */}
+                            {mot.id && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleToggleFerias(mot.id, mot.ferias); }}
+                                className={`px-2 py-1.5 md:px-3 md:py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-sm ${
+                                  mot.ferias 
+                                    ? 'bg-orange-100 text-orange-600 hover:bg-orange-200 border-orange-200' 
+                                    : 'bg-white text-slate-400 hover:text-orange-500 hover:bg-slate-50 border-slate-200 border'
+                                }`}
+                              >
+                                <Plane size={12} />
+                                <span className="hidden sm:inline">{mot.ferias ? 'Retornar' : 'Férias'}</span>
+                              </button>
+                            )}
+
+                            {/* Oculta os totais caso esteja de férias pra manter a coluna limpa */}
+                            {!isFeriasGrupo && (
+                              <div className="text-right">
+                                <p className="font-black text-xl md:text-2xl leading-none" style={{ color: corDoNumero }}>{mot.total}</p>
+                                <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{isExtra ? 'Extras' : 'Viagens'}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
