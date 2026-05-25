@@ -13,6 +13,7 @@ const TransporteFrota = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [rankingData, setRankingData] = useState([]);
+  const [motoristasBase, setMotoristasBase] = useState([]); // Novo estado para a base de motoristas
   const [filtroMes, setFiltroMes] = useState('TODOS');
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
   const [opcoesFiltros, setOpcoesFiltros] = useState({ meses: [], tipos: [] });
@@ -28,6 +29,7 @@ const TransporteFrota = () => {
     return [f(0), f(8), f(4)];
   };
 
+  // 1. Busca Filtros
   useEffect(() => {
     const fetchFiltros = async () => {
       const { data } = await supabaseFrota
@@ -45,6 +47,21 @@ const TransporteFrota = () => {
     fetchFiltros();
   }, []);
 
+  // 2. Busca Base de Motoristas Cadastrados
+  useEffect(() => {
+    const fetchMotoristasBase = async () => {
+      const { data, error } = await supabaseFrota
+        .from('motoristas_cadastrados')
+        .select('*');
+      
+      if (!error && data) {
+        setMotoristasBase(data);
+      }
+    };
+    fetchMotoristasBase();
+  }, []);
+
+  // 3. Busca o Ranking de Viagens
   useEffect(() => {
     const fetchRanking = async () => {
       setLoading(true);
@@ -64,34 +81,58 @@ const TransporteFrota = () => {
     fetchRanking();
   }, [filtroMes, filtroTipo]);
 
+  // Merge e Lógica do Ranking
   const rankingPorTurno = useMemo(() => {
     const grupos = {};
+
+    // A. Mapeia TODOS os motoristas da base oficial (garantindo os zerados)
+    motoristasBase.forEach(mot => {
+      const turno = mot.Turno || 'NÃO DEFINIDO';
+      if (!grupos[turno]) grupos[turno] = [];
+
+      // Procura o motorista no resultado das viagens
+      const dadosViagem = rankingData.find(r => r.motorista_nome === mot.motorista);
+      const totalViagens = dadosViagem ? dadosViagem.total_viagens : 0;
+      
+      // Identifica férias baseado na coluna status
+      const estaDeFerias = mot.status && mot.status.toUpperCase() === 'FÉRIAS';
+
+      grupos[turno].push({ 
+        nome: mot.motorista, 
+        total: totalViagens,
+        ferias: estaDeFerias
+      });
+    });
+
+    // B. Pega motoristas que talvez tenham viagem mas não estejam na base (garantia extra)
     rankingData.forEach(item => {
       const turno = item.turno_nome || 'NÃO DEFINIDO';
       if (!grupos[turno]) grupos[turno] = [];
       
-      // Garante que se o total vir nulo, indefinido ou vazio, seja computado como 0
-      const totalViagens = item.total_viagens || 0;
-      
-      grupos[turno].push({ 
-        nome: item.motorista_nome, 
-        total: totalViagens 
-      });
+      const jaExiste = grupos[turno].some(g => g.nome === item.motorista_nome);
+      if (!jaExiste) {
+        grupos[turno].push({ 
+          nome: item.motorista_nome, 
+          total: item.total_viagens || 0,
+          ferias: false 
+        });
+      }
     });
-    
+
+    // C. Ordenação
     Object.keys(grupos).forEach(t => {
       grupos[t].sort((a, b) => {
         if (filtroTipo === 'EXTRA') {
-          // Se o filtro for EXTRA, o menor número (inclusive o 0) assume o topo absoluto
-          return a.total - b.total;
+          // EXTRA: Menor para o Maior (0 no topo)
+          return a.total - b.total; 
         }
-        // Caso contrário, ordenação tradicional do maior para o menor
-        return b.total - a.total;
+        // DEFAULT: Maior para o Menor
+        return b.total - a.total; 
       });
     });
-    
+
     return grupos;
-  }, [rankingData, filtroTipo]);
+  }, [rankingData, motoristasBase, filtroTipo]);
 
   const exportarPDF = () => {
     const doc = new jsPDF('p', 'mm', 'a4');
@@ -288,14 +329,26 @@ const TransporteFrota = () => {
 
                       return (
                         <div key={index} className={classesCard} style={estiloCard}>
-                          <div className="flex items-center gap-3 md:gap-4 flex-1 truncate">
+                          <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
                             {renderizarPodio(index)}
-                            <div className="truncate">
-                              <p className={`font-black uppercase text-xs md:text-sm truncate ${index === 0 && !isExtra ? 'text-yellow-700' : 'text-[#0f4c81]'}`}>{mot.nome}</p>
-                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Motorista</p>
+                            <div className="truncate min-w-0 flex-1">
+                              
+                              {/* CONTAINER DE NOME E FÉRIAS */}
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className={`font-black uppercase text-xs md:text-sm truncate ${index === 0 && !isExtra ? 'text-yellow-700' : 'text-[#0f4c81]'}`}>
+                                  {mot.nome}
+                                </p>
+                                {mot.ferias && (
+                                  <span className="bg-orange-100 text-orange-600 text-[8px] px-1.5 py-0.5 rounded border border-orange-200 font-black uppercase tracking-widest shadow-sm flex-shrink-0">
+                                    Férias
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Motorista</p>
                             </div>
                           </div>
-                          <div className="text-right ml-2">
+                          <div className="text-right ml-2 flex-shrink-0">
                             <p className="font-black text-xl md:text-2xl leading-none" style={{ color: corDoNumero }}>{mot.total}</p>
                             <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{isExtra ? 'Extras' : 'Viagens'}</p>
                           </div>
