@@ -87,6 +87,9 @@ const TransporteFrota = () => {
 
     // A. Mapeia TODOS os motoristas da base oficial (garantindo os zerados)
     motoristasBase.forEach(mot => {
+      // IGNORA USUÁRIOS ADMINISTRADORES
+      if (mot.admin === true) return;
+
       const turno = mot.Turno || 'NÃO DEFINIDO';
       if (!grupos[turno]) grupos[turno] = [];
 
@@ -106,6 +109,10 @@ const TransporteFrota = () => {
 
     // B. Pega motoristas que talvez tenham viagem mas não estejam na base (garantia extra)
     rankingData.forEach(item => {
+      // Garante que mesmo se um admin fez uma viagem, ele não apareça no ranking
+      const isAdmin = motoristasBase.some(mot => mot.motorista === item.motorista_nome && mot.admin === true);
+      if (isAdmin) return;
+
       const turno = item.turno_nome || 'NÃO DEFINIDO';
       if (!grupos[turno]) grupos[turno] = [];
       
