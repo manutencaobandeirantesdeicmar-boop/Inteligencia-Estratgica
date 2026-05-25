@@ -69,11 +69,27 @@ const TransporteFrota = () => {
     rankingData.forEach(item => {
       const turno = item.turno_nome || 'NÃO DEFINIDO';
       if (!grupos[turno]) grupos[turno] = [];
-      grupos[turno].push({ nome: item.motorista_nome, total: item.total_viagens });
+      
+      // Garante que se o total vir nulo, indefinido ou vazio, seja computado como 0
+      const totalViagens = item.total_viagens || 0;
+      
+      grupos[turno].push({ 
+        nome: item.motorista_nome, 
+        total: totalViagens 
+      });
     });
+    
     Object.keys(grupos).forEach(t => {
-      grupos[t].sort((a, b) => filtroTipo === 'EXTRA' ? a.total - b.total : b.total - a.total);
+      grupos[t].sort((a, b) => {
+        if (filtroTipo === 'EXTRA') {
+          // Se o filtro for EXTRA, o menor número (inclusive o 0) assume o topo absoluto
+          return a.total - b.total;
+        }
+        // Caso contrário, ordenação tradicional do maior para o menor
+        return b.total - a.total;
+      });
     });
+    
     return grupos;
   }, [rankingData, filtroTipo]);
 
@@ -244,13 +260,24 @@ const TransporteFrota = () => {
                       let corDoNumero = '';
 
                       if (isExtra) {
-                        const minTrips = motoristasRankeados[0].total;
-                        const maxTrips = motoristasRankeados[motoristasRankeados.length - 1].total;
+                        const minTrips = motoristasRankeados[0]?.total || 0;
+                        const maxTrips = motoristasRankeados[motoristasRankeados.length - 1]?.total || 0;
                         const range = maxTrips - minTrips;
+                        
+                        // Evita divisão por zero caso o range seja nulo
                         const ratio = range === 0 ? 0 : (mot.total - minTrips) / range;
                         const hue = 120 - (ratio * 120);
-                        estiloCard = { background: `linear-gradient(to right, hsla(${hue}, 85%, 96%, 1), white)`, borderColor: `hsla(${hue}, 80%, 85%, 1)`, borderWidth: '1px', borderStyle: 'solid' };
-                        corDoNumero = `hsl(${hue}, 75%, 45%)`;
+                        
+                        // Destaca com verde vivo perfeito os zerados, os demais ganham degrades progressivos
+                        estiloCard = { 
+                          background: mot.total === 0 
+                            ? `linear-gradient(to right, #f0fdf4, white)` 
+                            : `linear-gradient(to right, hsla(${hue}, 85%, 96%, 1), white)`, 
+                          borderColor: mot.total === 0 ? '#bbf7d0' : `hsla(${hue}, 80%, 85%, 1)`, 
+                          borderWidth: '1px', 
+                          borderStyle: 'solid' 
+                        };
+                        corDoNumero = mot.total === 0 ? '#16a34a' : `hsl(${hue}, 75%, 45%)`;
                       } else {
                         if (index === 0) classesCard += 'bg-gradient-to-r from-yellow-50 to-white border border-yellow-200';
                         else if (index === 1) classesCard += 'bg-gradient-to-r from-slate-50 to-white border border-slate-200';
