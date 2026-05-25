@@ -81,18 +81,46 @@ const TransporteFrota = () => {
     fetchRanking();
   }, [filtroMes, filtroTipo]);
 
+  // Função para marcar/desmarcar Férias direto na tela
   const handleToggleFerias = async (motId, isCurrentlyFerias) => {
+    // Se o ID for inválido por algum motivo, aborta antes de tentar
+    if (!motId) {
+      console.error("ID do motorista não encontrado!");
+      return;
+    }
+
     const novoStatus = isCurrentlyFerias ? 'ativo' : 'FÉRIAS';
+    console.log(`Tentando atualizar motorista ID: ${motId} para status: ${novoStatus}`);
     
+    // Atualiza otimisticamente a tela para parecer rápido
     setMotoristasBase(prev => prev.map(m => m.id === motId ? { ...m, status: novoStatus } : m));
 
-    const { error } = await supabaseFrota
-      .from('motoristas_cadastrados')
-      .update({ status: novoStatus })
-      .eq('id', motId);
+    try {
+      // Atualiza no banco (adicionamos o .select() no final para confirmar a alteração)
+      const { data, error } = await supabaseFrota
+        .from('motoristas_cadastrados')
+        .update({ status: novoStatus }) 
+        .eq('id', motId)
+        .select();
 
-    if (error) {
-      alert("Erro ao alterar férias: " + error.message);
+      console.log("Resposta do Supabase:", { data, error });
+
+      if (error) {
+        throw error;
+      }
+
+      // Se o Supabase não retornar erro, mas também não devolver nenhum dado,
+      // significa que o update falhou silenciosamente (geralmente por causa de RLS).
+      if (!data || data.length === 0) {
+        console.warn("Alerta: O update rodou no Supabase, mas NENHUMA linha foi afetada.");
+        throw new Error("Update falhou silenciosamente. Verifique o RLS da tabela.");
+      }
+
+    } catch (err) {
+      console.error("Erro completo ao alterar férias:", err);
+      alert("Erro ao alterar férias. Verifique o console (F12).");
+      
+      // Reverte a tela em caso de erro
       setMotoristasBase(prev => prev.map(m => m.id === motId ? { ...m, status: isCurrentlyFerias ? 'FÉRIAS' : 'ativo' } : m));
     }
   };
