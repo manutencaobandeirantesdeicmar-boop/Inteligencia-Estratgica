@@ -8,6 +8,8 @@ import HubInicial from './pages/HubInicial';
 import StatusDiario from './pages/StatusDiario';
 import Programacao from './pages/Programacao'; 
 import TransporteFrota from './pages/TransporteFrota';
+import TransporteHub from './pages/TransporteHub';
+import ControleRos from './pages/ControleRos';
 
 // --- COMPONENTE DE ROTA PRIVADA ---
 // Se não tiver usuário, joga para a tela de Login
@@ -46,11 +48,15 @@ function App() {
         {/* ROTA PÚBLICA */}
         <Route path="/login" element={<Login />} />
         
-        {/* ROTAS PRIVADAS (Envolvidas pelo nosso componente de segurança) */}
+        {/* ROTAS PRIVADAS */}
         <Route path="/" element={<RotaPrivada usuario={usuario}><HubInicial /></RotaPrivada>} />
         <Route path="/status" element={<RotaPrivada usuario={usuario}><StatusDiario /></RotaPrivada>} />
         <Route path="/programacao" element={<RotaPrivada usuario={usuario}><Programacao /></RotaPrivada>} />
+        
+        {/* NOVAS ROTAS DE TRANSPORTE */}
+        <Route path="/transporte-hub" element={<RotaPrivada usuario={usuario}><TransporteHub /></RotaPrivada>} />
         <Route path="/TransporteFrota" element={<RotaPrivada usuario={usuario}><TransporteFrota /></RotaPrivada>} />
+        <Route path="/controle-ros" element={<RotaPrivada usuario={usuario}><ControleRos /></RotaPrivada>} />
       </Routes>
     </BrowserRouter>
   );
