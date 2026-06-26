@@ -175,11 +175,16 @@ const Programacao = () => {
   };
 
   // Filtragem interna do Editor Base
-  const linhasEditorFiltradas = linhasPlanilha.filter(item => {
+ const linhasEditorFiltradas = linhasPlanilha.filter(item => {
     const batePlaca = (item.placa || '').toLowerCase().includes(buscaEditor.toLowerCase());
     const bateFilial = filialEditor === 'TODAS' || item.filial === filialEditor;
     return batePlaca && bateFilial;
   }).sort((a, b) => {
+    // 1️⃣ REGRA NOVA: Se "a" é nova (sem id) e "b" já existe, "a" sobe pro topo
+    if (!a.id && b.id) return -1;
+    if (a.id && !b.id) return 1;
+
+    // ... Restante da sua ordenação original ...
     if (ordenacaoEditor === 'placa') return (a.placa || '').localeCompare(b.placa || '');
     if (ordenacaoEditor === 'prioridade') {
       const peso = { 'CRÍTICA': 4, 'ALTA': 3, 'MÉDIA': 2, 'BAIXA': 1 };
@@ -537,7 +542,7 @@ const Programacao = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
   {linhasEditorFiltradas.map((linha, index) => (
-    <tr key={index} className={`hover:bg-slate-50 transition-colors ${!linha.id ? 'bg-amber-50/50' : ''}`}>
+   <tr key={index} className={`transition-colors ${ !linha.id ? 'bg-amber-100/80 shadow-[inset_4px_0_0_0_#f59e0b]' : 'hover:bg-slate-50' }`} >
       <td className="p-1 border-r border-slate-100 text-center">
         <div className="flex gap-1 justify-center">
           <button onClick={() => salvarLinha(linha)} className="p-1 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded" title="Salvar"><Save size={13}/></button>
