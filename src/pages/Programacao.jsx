@@ -108,21 +108,26 @@ const Programacao = () => {
     setLinhasPlanilha([novaLinha, ...linhasPlanilha]);
   };
 
-  const duplicarLinha = (index) => {
-    const linhaCopiada = { ...linhasPlanilha[index], id: null, os: '' }; 
+  const duplicarLinha = (linhaRef) => {
+    // Encontra o index exato no array original através da referência do objeto
+    const index = linhasPlanilha.findIndex(l => l === linhaRef);
+    if (index === -1) return;
+    
+    const linhaCopiada = { ...linhaRef, id: null, os: '' };
     const novasLinhas = [...linhasPlanilha];
     novasLinhas.splice(index + 1, 0, linhaCopiada);
     setLinhasPlanilha(novasLinhas);
   };
 
-  const atualizarLinha = (index, campo, valor) => {
-    const novasLinhas = [...linhasPlanilha];
-    novasLinhas[index][campo] = valor;
+  const atualizarLinha = (linhaRef, campo, valor) => {
+    const novasLinhas = linhasPlanilha.map(linha => 
+      linha === linhaRef ? { ...linha, [campo]: valor } : linha
+    );
     setLinhasPlanilha(novasLinhas);
   };
 
-  const salvarLinha = async (linha, index) => {
-    const payload = { ...linha };
+  const salvarLinha = async (linhaRef) => {
+    const payload = { ...linhaRef };
     if (payload.data_parada) payload.data_parada = new Date(payload.data_parada).toISOString();
     if (payload.prazo) payload.prazo = new Date(payload.prazo).toISOString();
     if (payload.data_final) payload.data_final = new Date(payload.data_final).toISOString();
@@ -136,27 +141,34 @@ const Programacao = () => {
       const { data, error: err } = await supabase.from('programacao').insert([payload]).select();
       error = err;
       if (!err && data) {
-        const novasLinhas = [...linhasPlanilha];
-        novasLinhas[index] = data[0];
+        // Atualiza a linha recém-salva com o ID gerado pelo banco
+        const novasLinhas = linhasPlanilha.map(linha => 
+          linha === linhaRef ? data[0] : linha
+        );
         setLinhasPlanilha(novasLinhas);
       }
     }
-    if (!error) { alert("✅ Registro salvo com sucesso!"); fetchProgramacao(); } 
-    else { alert("Erro ao salvar: " + error.message); }
+    if (!error) { 
+      alert("✅ Registro salvo com sucesso!");
+      fetchProgramacao(); 
+    } else { 
+      alert("Erro ao salvar: " + error.message); 
+    }
   };
 
-  const handleExcluir = async (id, index) => {
+  const handleExcluir = async (linhaRef) => {
     if (!window.confirm("⚠️ Deseja excluir este item permanentemente?")) return;
-    if (!id) {
-        const novasLinhas = [...linhasPlanilha];
-        novasLinhas.splice(index, 1);
-        setLinhasPlanilha(novasLinhas);
-        return;
+    
+    if (!linhaRef.id) {
+      // Se não tem ID, é uma linha nova não salva; apenas removemos da tela
+      const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
+      setLinhasPlanilha(novasLinhas);
+      return;
     }
-    const { error } = await supabase.from('programacao').delete().eq('id', id);
+    
+    const { error } = await supabase.from('programacao').delete().eq('id', linhaRef.id);
     if (!error) {
-      const novasLinhas = [...linhasPlanilha];
-      novasLinhas.splice(index, 1);
+      const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
       setLinhasPlanilha(novasLinhas);
       fetchProgramacao();
     }
@@ -524,65 +536,64 @@ const Programacao = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {linhasEditorFiltradas.map((linha, index) => (
-                    <tr key={index} className={`hover:bg-slate-50 transition-colors ${!linha.id ? 'bg-amber-50/50' : ''}`}>
-                      <td className="p-1 border-r border-slate-100 text-center">
-                        <div className="flex gap-1 justify-center">
-                          <button onClick={() => salvarLinha(linha, index)} className="p-1 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded" title="Salvar"><Save size={13}/></button>
-                          <button onClick={() => duplicarLinha(index)} className="p-1 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded" title="Duplicar"><Copy size={13}/></button>
-                          <button onClick={() => handleExcluir(linha.id, index)} className="p-1 bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 rounded" title="Excluir"><Trash2 size={13}/></button>
-                        </div>
-                      </td>
-                      <td className="p-1 border-r border-slate-100"><input type="text" value={linha.placa || ''} onChange={e => atualizarLinha(index, 'placa', e.target.value.toUpperCase())} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-black uppercase text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
-                      <td className="p-1 border-r border-slate-100"><input type="text" value={linha.os || ''} onChange={e => atualizarLinha(index, 'os', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
-                      <td className="p-1 border-r border-slate-100">
-                        <select value={linha.filial || 'CLIA'} onChange={e => atualizarLinha(index, 'filial', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none">
-                          {FILIAIS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-1 border-r border-slate-100">
-                        <select value={linha.situacao || 'PROGRAMADO'} onChange={e => atualizarLinha(index, 'situacao', e.target.value)} className="w-full p-1 bg-amber-50 border border-amber-200 text-amber-700 rounded text-xs font-bold outline-none">
-                          {COLUNAS_KANBAN.filter(c => c !== 'ATRASADOS').map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-1 border-r border-slate-100">
-                        <select value={linha.prioridade || 'MÉDIA'} onChange={e => atualizarLinha(index, 'prioridade', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none">
-                          {PRIORIDADES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-1 border-r border-slate-100">
-                        <select value={linha.tipo || 'PREVENTIVA'} onChange={e => atualizarLinha(index, 'tipo', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-700 outline-none">
-                          {TIPOS_MANUTENCAO.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-1 border-r border-slate-100">
-                        <select value={linha.falha || 'MOTOR'} onChange={e => atualizarLinha(index, 'falha', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-700 outline-none">
-                          {FALHAS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-1 border-r border-slate-100">
-                        <select value={linha.duracao || 'CURTA'} onChange={e => atualizarLinha(index, 'duracao', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-600 outline-none">
-                          {DURACAO.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-1 border-r border-slate-100">
-                        <select value={linha.reprogramado || 'NÃO'} onChange={e => atualizarLinha(index, 'reprogramado', e.target.value)} className={`w-full p-1 border rounded text-[10px] font-bold outline-none ${linha.reprogramado === 'SIM' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-                          {OPCOES_SIM_NAO.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-1 border-r border-slate-100"><input type="text" placeholder="Responsável..." value={linha.responsavel || ''} onChange={e => atualizarLinha(index, 'responsavel', e.target.value.toUpperCase())} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
-                      
-                      {/* Bloco de Datas Dense UI */}
-                      <td className="p-1 border-r border-slate-100 text-[9px] text-slate-400 space-y-0.5">
-                        <div className="flex items-center gap-1"><span className="w-7 text-slate-400 font-bold">Início:</span><input type="datetime-local" value={formatDtInput(linha.data_parada)} onChange={e => atualizarLinha(index, 'data_parada', e.target.value)} className="bg-slate-50 border border-slate-200 rounded p-0.5 text-slate-700 w-full outline-none" /></div>
-                        <div className="flex items-center gap-1"><span className="w-7 text-slate-400 font-bold">Prazo:</span><input type="datetime-local" value={formatDtInput(linha.prazo)} onChange={e => atualizarLinha(index, 'prazo', e.target.value)} className="bg-slate-50 border border-slate-200 rounded p-0.5 text-slate-700 w-full outline-none" /></div>
-                        <div className="flex items-center gap-1"><span className="w-7 text-emerald-600 font-bold">Fim:</span><input type="datetime-local" value={formatDtInput(linha.data_final)} onChange={e => atualizarLinha(index, 'data_final', e.target.value)} className="bg-emerald-50 border border-emerald-200 rounded p-0.5 text-emerald-700 w-full outline-none" /></div>
-                      </td>
-                      
-                      <td className="p-1"><textarea rows="2" placeholder="..." value={linha.observacoes || ''} onChange={e => atualizarLinha(index, 'observacoes', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 text-slate-700 rounded text-[10px] resize-none outline-none focus:border-[#0f4c81]" /></td>
-                    </tr>
-                  ))}
-                </tbody>
+  {linhasEditorFiltradas.map((linha, index) => (
+    <tr key={index} className={`hover:bg-slate-50 transition-colors ${!linha.id ? 'bg-amber-50/50' : ''}`}>
+      <td className="p-1 border-r border-slate-100 text-center">
+        <div className="flex gap-1 justify-center">
+          <button onClick={() => salvarLinha(linha)} className="p-1 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded" title="Salvar"><Save size={13}/></button>
+          <button onClick={() => duplicarLinha(linha)} className="p-1 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded" title="Duplicar"><Copy size={13}/></button>
+          <button onClick={() => handleExcluir(linha)} className="p-1 bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 rounded" title="Excluir"><Trash2 size={13}/></button>
+        </div>
+      </td>
+      <td className="p-1 border-r border-slate-100"><input type="text" value={linha.placa || ''} onChange={e => atualizarLinha(linha, 'placa', e.target.value.toUpperCase())} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-black uppercase text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
+      <td className="p-1 border-r border-slate-100"><input type="text" value={linha.os || ''} onChange={e => atualizarLinha(linha, 'os', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.filial || 'CLIA'} onChange={e => atualizarLinha(linha, 'filial', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none">
+          {FILIAIS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.situacao || 'PROGRAMADO'} onChange={e => atualizarLinha(linha, 'situacao', e.target.value)} className="w-full p-1 bg-amber-50 border border-amber-200 text-amber-700 rounded text-xs font-bold outline-none">
+          {COLUNAS_KANBAN.filter(c => c !== 'ATRASADOS').map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.prioridade || 'MÉDIA'} onChange={e => atualizarLinha(linha, 'prioridade', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none">
+          {PRIORIDADES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.tipo || 'PREVENTIVA'} onChange={e => atualizarLinha(linha, 'tipo', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-700 outline-none">
+          {TIPOS_MANUTENCAO.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.falha || 'MOTOR'} onChange={e => atualizarLinha(linha, 'falha', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-700 outline-none">
+          {FALHAS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.duracao || 'CURTA'} onChange={e => atualizarLinha(linha, 'duracao', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-600 outline-none">
+          {DURACAO.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.reprogramado || 'NÃO'} onChange={e => atualizarLinha(linha, 'reprogramado', e.target.value)} className={`w-full p-1 border rounded text-[10px] font-bold outline-none ${linha.reprogramado === 'SIM' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+          {OPCOES_SIM_NAO.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100"><input type="text" placeholder="Responsável..." value={linha.responsavel || ''} onChange={e => atualizarLinha(linha, 'responsavel', e.target.value.toUpperCase())} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
+      
+      <td className="p-1 border-r border-slate-100 text-[9px] text-slate-400 space-y-0.5">
+        <div className="flex items-center gap-1"><span className="w-7 text-slate-400 font-bold">Início:</span><input type="datetime-local" value={formatDtInput(linha.data_parada)} onChange={e => atualizarLinha(linha, 'data_parada', e.target.value)} className="bg-slate-50 border border-slate-200 rounded p-0.5 text-slate-700 w-full outline-none" /></div>
+        <div className="flex items-center gap-1"><span className="w-7 text-slate-400 font-bold">Prazo:</span><input type="datetime-local" value={formatDtInput(linha.prazo)} onChange={e => atualizarLinha(linha, 'prazo', e.target.value)} className="bg-slate-50 border border-slate-200 rounded p-0.5 text-slate-700 w-full outline-none" /></div>
+        <div className="flex items-center gap-1"><span className="w-7 text-emerald-600 font-bold">Fim:</span><input type="datetime-local" value={formatDtInput(linha.data_final)} onChange={e => atualizarLinha(linha, 'data_final', e.target.value)} className="bg-emerald-50 border border-emerald-200 rounded p-0.5 text-emerald-700 w-full outline-none" /></div>
+      </td>
+      
+      <td className="p-1"><textarea rows="2" placeholder="..." value={linha.observacoes || ''} onChange={e => atualizarLinha(linha, 'observacoes', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 text-slate-700 rounded text-[10px] resize-none outline-none focus:border-[#0f4c81]" /></td>
+    </tr>
+  ))}
+</tbody>
               </table>
             </div>
           </div>
