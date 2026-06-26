@@ -48,10 +48,10 @@ const HubInicial = () => {
     { 
       id: 'frota', 
       titulo: 'Transporte Frota', 
-      desc: 'Ranking Operacional', 
+      desc: 'Ranking & Ocorrências', // Descrição atualizada
       icon: <Trophy size={32} />, 
       active: true,
-      path: '/TransporteFrota',
+      path: '/transporte-hub', // Novo caminho
       posicao: 'md:col-start-1 md:row-start-3 md:justify-self-end'
     },
     { 
