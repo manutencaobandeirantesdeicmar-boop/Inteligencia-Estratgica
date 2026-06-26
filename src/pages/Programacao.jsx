@@ -91,6 +91,9 @@ const Programacao = () => {
     return prazo < hoje;
   };
 
+  // ==============================
+  // LÓGICA DO EDITOR BASE DE DADOS
+  // ==============================
   const adicionarNovaLinha = () => {
     const novaLinha = {
       _tempId: Date.now(), // ID temporário para o React não perder o foco ao digitar
@@ -523,7 +526,7 @@ const Programacao = () => {
                     <th className="p-2 min-w-[200px]">Observações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+<tbody className="divide-y divide-slate-100">
                   {linhasEditorFiltradas.map((linha) => (
                     <tr key={linha.id || linha._tempId} className={`hover:bg-slate-50 transition-colors ${!linha.id ? 'bg-amber-50/50' : ''}`}>
                       <td className="p-1 border-r border-slate-100 text-center">
