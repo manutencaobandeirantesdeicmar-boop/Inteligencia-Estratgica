@@ -45,7 +45,7 @@ const ControleRos = () => {
       .from('controle_ros')
       .select('*')
       .order('data_ocorrencia', { ascending: false });
-
+    
     if (!error && data) {
       setRos(data);
     } else {
@@ -93,7 +93,6 @@ const ControleRos = () => {
   const handleSubmitRO = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-
     try {
       const mesOcorrencia = formData.data_ocorrencia 
         ? formData.data_ocorrencia.substring(5, 7) 
@@ -150,7 +149,6 @@ const ControleRos = () => {
   const mesesDisponiveis = [...new Set(ros.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(5, 7) : null).filter(Boolean))].sort();
   const nomeMeses = { '01':'Janeiro', '02':'Fevereiro', '03':'Março', '04':'Abril', '05':'Maio', '06':'Junho', '07':'Julho', '08':'Agosto', '09':'Setembro', '10':'Outubro', '11':'Novembro', '12':'Dezembro' };
 
-
   // ==============================
   // PROCESSAMENTO DOS KPIs E GRÁFICOS (Usando rosFiltradas)
   // ==============================
@@ -159,7 +157,6 @@ const ControleRos = () => {
   const custoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custoTotal);
   const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
 
-  
   const dadosGraficoMensal = rosFiltradas.reduce((acc, curr) => {
     if (curr.data_ocorrencia) {
       const data = new Date(curr.data_ocorrencia);
@@ -177,7 +174,7 @@ const ControleRos = () => {
     const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const dadosAnuais = meses.map(m => ({ name: m }));
     const anosPresentes = [...new Set(rosFiltradas.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(0, 4) : null).filter(Boolean))];
-
+    
     rosFiltradas.forEach(r => {
       if (!r.data_ocorrencia) return;
       const ano = r.data_ocorrencia.substring(0, 4);
@@ -403,7 +400,7 @@ const ControleRos = () => {
                 </div>
 
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col">
-                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
                      <FileWarning className="text-red-500"/> Ranking por Tipo de Ocorrência
                    </h3>
                    <div className="flex flex-col gap-3">
@@ -648,7 +645,7 @@ const ControleRos = () => {
         </div>
       )}
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes fade-in { 
           from { opacity: 0; transform: translateY(10px); } 
           to { opacity: 1; transform: translateY(0); } 
@@ -656,7 +653,7 @@ const ControleRos = () => {
         .animate-fade-in { 
           animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-      `}</style>
+      `}} />
     </div>
   );
 };
