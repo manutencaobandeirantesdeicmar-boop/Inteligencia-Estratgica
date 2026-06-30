@@ -5,7 +5,8 @@ import {
   Loader2, Layout, Columns, Table, Info, X, Save, Search, Filter, Edit, Download
 } from 'lucide-react';
 import { supabase } from '../services/supabase-config';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+// IMPORT ATUALIZADO: Adicionado 'LabelList'
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, LabelList } from 'recharts';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -22,29 +23,41 @@ const ControleRos = () => {
   const [filtroMes, setFiltroMes] = useState('');
 
   // ==============================
-  // EXPORTAÇÃO PARA PDF
+  // EXPORTAÇÃO PARA PDF (ATUALIZADO PARA 2 PÁGINAS)
   // ==============================
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExportPDF = async () => {
-    const element = document.getElementById('dashboard-export-area');
-    if (!element) return;
+    const elementDashboard = document.getElementById('dashboard-export-area');
+    const elementTable = document.getElementById('table-export-area'); // Nova área da tabela
+    if (!elementDashboard || !elementTable) return;
 
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(element, {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+
+      // --- PÁGINA 1: Capturar Dashboard ---
+      const canvasDash = await html2canvas(elementDashboard, {
         scale: 2, 
         backgroundColor: '#030712', 
         useCORS: true, 
       });
+      const imgDataDash = canvasDash.toDataURL('image/png');
+      const dashHeight = (canvasDash.height * pdfWidth) / canvasDash.width;
+      pdf.addImage(imgDataDash, 'PNG', 0, 0, pdfWidth, dashHeight);
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      // --- PÁGINA 2: Capturar Tabela Oculta ---
+      pdf.addPage();
+      const canvasTable = await html2canvas(elementTable, {
+        scale: 2, 
+        backgroundColor: '#030712', 
+        useCORS: true, 
+      });
+      const imgDataTable = canvasTable.toDataURL('image/png');
+      const tableHeight = (canvasTable.height * pdfWidth) / canvasTable.width;
+      pdf.addImage(imgDataTable, 'PNG', 0, 0, pdfWidth, tableHeight);
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save('Resumo_Dashboard_ROs.pdf');
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
@@ -59,7 +72,7 @@ const ControleRos = () => {
   // ==============================
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState(null); // Se null = Nova RO; Se tem ID = Editando
+  const [editingId, setEditingId] = useState(null); 
   const [formData, setFormData] = useState({
     equipamento: '',
     data_ocorrencia: '',
@@ -186,25 +199,23 @@ const ControleRos = () => {
   const nomeMeses = { '01':'Janeiro', '02':'Fevereiro', '03':'Março', '04':'Abril', '05':'Maio', '06':'Junho', '07':'Julho', '08':'Agosto', '09':'Setembro', '10':'Outubro', '11':'Novembro', '12':'Dezembro' };
   
   // ==============================
-  // PROCESSAMENTO DOS KPIs E GRÁFICOS (Usando rosFiltradas)
+  // PROCESSAMENTO DOS KPIs E GRÁFICOS
   // ==============================
   const totalRos = rosFiltradas.length;
   const custoTotal = rosFiltradas.reduce((acc, curr) => acc + (Number(curr.custo_avaria) || 0), 0);
   const custoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custoTotal);
   const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
   
-  // NOVA LÓGICA DO GRÁFICO: Ordenado e com inclusão do Ano
   const dadosGraficoMensal = Object.values(rosFiltradas.reduce((acc, curr) => {
     if (curr.data_ocorrencia && curr.data_ocorrencia.length >= 7) {
       const ano = curr.data_ocorrencia.substring(0, 4);
       const mesStr = curr.data_ocorrencia.substring(5, 7);
-      const chave = `${ano}-${mesStr}`; // ex: 2025-01 para ordenação
+      const chave = `${ano}-${mesStr}`; 
       
       if (!acc[chave]) {
         const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
-       
         acc[chave] = { 
-          name: `${mesAbrev}/${ano}`, // Ex: JAN/2025
+          name: `${mesAbrev}/${ano}`, 
           Ocorrencias: 0,
           chaveOrdenacao: chave
         };
@@ -300,7 +311,6 @@ const ControleRos = () => {
       {/* BARRA DE FERRAMENTAS: ABAS E FILTROS */}
       <div className="relative z-20 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-8">
         
-        {/* Abas */}
         <div className="flex gap-2 bg-white/[0.02] p-1.5 rounded-2xl w-fit border border-white/5 backdrop-blur-sm">
           <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
             <Layout size={18} /> Visão Geral
@@ -313,7 +323,6 @@ const ControleRos = () => {
           </button>
         </div>
 
-        {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
           <div className="relative flex-grow sm:min-w-[250px]">
             <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
@@ -393,13 +402,17 @@ const ControleRos = () => {
                    </h3>
                    <div className="flex-grow w-full h-full">
                      <ResponsiveContainer width="100%" height="100%">
-                       <LineChart data={comparativoAnual} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                       {/* Aumento do margin-top para 25 para os Labels caberem */}
+                       <LineChart data={comparativoAnual} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
                          <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                          <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                          <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
                          <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#cbd5e1' }}/>
                          {anosDisponiveis.map((ano, i) => (
-                           <Line key={ano} type="monotone" dataKey={ano} stroke={i === 0 ? '#10b981' : '#0f4c81'} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                           <Line key={ano} type="monotone" dataKey={ano} stroke={i === 0 ? '#10b981' : '#0f4c81'} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }}>
+                             {/* NOVO: Rótulos de Dados no Gráfico de Linha */}
+                             <LabelList dataKey={ano} position="top" fill={i === 0 ? '#10b981' : '#64748b'} fontSize={11} fontWeight="bold" />
+                           </Line>
                          ))}
                        </LineChart>
                      </ResponsiveContainer>
@@ -410,16 +423,17 @@ const ControleRos = () => {
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
                      <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
                    </h3>
-                   {/* SCROLL HORIZONTAL APLICADO AQUI */}
                    <div className="flex-grow w-full h-full overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 transparent' }}>
-                     {/* Largura mínima dinâmica: 60px por barra para evitar esmagamento */}
                      <div style={{ minWidth: `${Math.max(dadosGraficoMensal.length * 60, 400)}px`, height: '100%' }}>
                        <ResponsiveContainer width="100%" height="100%">
-                         <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                         {/* Aumento do margin-top para 25 para os Labels caberem */}
+                         <BarChart data={dadosGraficoMensal} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
                            <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                            <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                            <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
                            <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
+                             {/* NOVO: Rótulos de Dados no Gráfico de Barras */}
+                             <LabelList dataKey="Ocorrencias" position="top" fill="#cbd5e1" fontSize={11} fontWeight="bold" />
                              {dadosGraficoMensal.map((entry, index) => (
                                <Cell key={`cell-${index}`} fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} />
                              ))}
@@ -476,6 +490,8 @@ const ControleRos = () => {
             </div>
           )}
 
+          {/* ABA 2 E ABA 3 OCULTADAS NESTE BLOCO (MANTIDAS IGUAIS) */}
+          {/* ... */}
           {/* =========================================
               ABA 2: KANBAN DE ACOMPANHAMENTO
              ========================================= */}
@@ -633,7 +649,6 @@ const ControleRos = () => {
 
             {/* Body Modal (Formulário) */}
             <form onSubmit={handleSubmitRO} className="p-6 overflow-y-auto flex flex-col gap-4">
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Equipamento / Placa *</label>
@@ -684,7 +699,6 @@ const ControleRos = () => {
                 </div>
               </div>
 
-              {/* Footer Modal / Submit */}
               <div className="mt-4 flex justify-end gap-3">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
                   Cancelar
@@ -698,6 +712,52 @@ const ControleRos = () => {
           </div>
         </div>
       )}
+
+      {/* =========================================
+          ÁREA OCULTA: TABELA PARA EXPORTAÇÃO PDF
+          (Renderizada fora da tela para não quebrar o layout)
+         ========================================= */}
+      <div className="absolute top-[-9999px] left-[-9999px]">
+        <div id="table-export-area" className="bg-[#030712] text-white p-8 w-[1000px]">
+          <div className="border-b border-white/20 pb-4 mb-6">
+            <h2 className="text-2xl font-black text-[#10b981] flex items-center gap-2">
+              <Table size={24} /> Resumo Analítico
+            </h2>
+            <p className="text-sm text-slate-400 mt-1 uppercase tracking-widest font-bold">
+              Detalhamento das Ocorrências Apresentadas no Dashboard
+            </p>
+          </div>
+          
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-[#10b981]/30 text-slate-400 text-xs uppercase tracking-widest">
+                <th className="p-3 font-bold">Equipamento</th>
+                <th className="p-3 font-bold">Data</th>
+                <th className="p-3 font-bold">Tipo</th>
+                <th className="p-3 font-bold">Custo (R$)</th>
+                <th className="p-3 font-bold">Nº RO / Status</th>
+                <th className="p-3 font-bold w-1/3">Avaria Relatada</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rosFiltradas.length > 0 ? rosFiltradas.map((item, idx) => (
+                <tr key={idx} className="border-b border-white/5 text-sm">
+                  <td className="p-3 font-black text-white">{item.equipamento}</td>
+                  <td className="p-3 text-slate-300">{item.data_ocorrencia || '-'}</td>
+                  <td className="p-3 text-slate-300">{item.tipo || '-'}</td>
+                  <td className="p-3 text-red-400 font-bold">{item.custo_avaria ? item.custo_avaria.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : '-'}</td>
+                  <td className="p-3 font-bold">{item.numero_ro ? <span className="text-[#10b981]">{item.numero_ro}</span> : <span className="text-amber-500">Pendente</span>}</td>
+                  <td className="p-3 text-slate-400 italic text-xs break-words">{item.avaria || 'Nenhuma descrição fornecida.'}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="6" className="p-6 text-center text-slate-500 font-bold">Nenhum dado para exibir neste filtro.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <style>{`
         @keyframes fade-in { 
