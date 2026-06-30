@@ -354,7 +354,7 @@ const ControleRos = () => {
                 </div>
               </div>
 
-              {/* RETORNO DOS RANKINGS NO DASHBOARD UI */}
+              {/* RANKINGS NO DASHBOARD UI */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
@@ -508,7 +508,8 @@ const ControleRos = () => {
       <div className="absolute top-[-9999px] left-[-9999px]">
         <div id="export-page-1" className="bg-white text-slate-800 p-8 w-[1000px]">
           <h2 className="text-3xl font-black text-slate-800 mb-6 border-b border-slate-200 pb-4">Relatório de Gestão - ROs</h2>
-          <div className="grid grid-cols-4 gap-4 mb-10">
+          
+          <div className="grid grid-cols-4 gap-4 mb-6">
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <h3 className="text-slate-500 text-[10px] font-black uppercase mb-1">Total Registrado</h3><p className="text-2xl font-black">{totalRos}</p>
             </div>
@@ -523,9 +524,10 @@ const ControleRos = () => {
               <p className={`text-2xl font-black ${isAumento ? 'text-red-500' : isQueda ? 'text-[#10b981]' : 'text-slate-800'}`}>{textoVariacao}</p>
             </div>
           </div>
-          <div className="mb-10 h-[350px]">
+          
+          <div className="mb-6 h-[300px]">
             <h3 className="text-lg font-black text-slate-800 mb-4">Comparativo Anual</h3>
-            <LineChart width={936} height={300} data={comparativoAnual} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
+            <LineChart width={936} height={260} data={comparativoAnual} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
               <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
               <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#334155' }}/>
@@ -536,9 +538,10 @@ const ControleRos = () => {
               ))}
             </LineChart>
           </div>
-          <div className="h-[350px]">
+          
+          <div className="mb-6 h-[300px]">
             <h3 className="text-lg font-black text-slate-800 mb-4">Histórico Mensal Geral</h3>
-            <BarChart width={936} height={300} data={dadosGraficoMensal} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
+            <BarChart width={936} height={260} data={dadosGraficoMensal} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
               <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
               <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
@@ -547,9 +550,40 @@ const ControleRos = () => {
               </Bar>
             </BarChart>
           </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+               <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 mb-4 flex items-center gap-2">Top 5 Equipamentos</h3>
+               <div className="flex flex-col gap-2">
+                 {rankingEquipamentos.map((item, index) => (
+                   <div key={item.equipamento} className="flex items-center justify-between bg-white border border-slate-200 p-3 rounded-xl">
+                       <div className="flex items-center gap-3">
+                       <span className={`text-base font-black w-5 text-center ${index === 0 ? 'text-red-500' : index === 1 ? 'text-amber-500' : 'text-slate-400'}`}>{index + 1}º</span>
+                       <div><p className="font-black text-slate-800 text-sm">{item.equipamento}</p></div>
+                     </div>
+                     <div className="bg-slate-100 px-3 py-1 rounded-lg text-sm font-black text-slate-800">{item.quantidade} <span className="text-[10px] font-normal text-slate-500">ROs</span></div>
+                    </div>
+                 ))}
+               </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+               <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 mb-4 flex items-center gap-2">Ranking por Tipo</h3>
+               <div className="flex flex-col gap-2">
+                  {rankingTipos.map((item, index) => (
+                   <div key={item.tipo} className="flex items-center justify-between bg-white border border-slate-200 p-3 rounded-xl">
+                     <div className="flex items-center gap-3">
+                        <span className={`text-base font-black w-5 text-center ${index === 0 ? 'text-red-500' : index === 1 ? 'text-amber-500' : 'text-slate-400'}`}>{index + 1}º</span>
+                       <div><p className="font-black text-slate-800 text-sm capitalize">{item.tipo || 'Não Definido'}</p></div>
+                     </div>
+                      <div className="bg-slate-100 px-3 py-1 rounded-lg text-sm font-black text-slate-800">{item.quantidade} <span className="text-[10px] font-normal text-slate-500">QTD</span></div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+          </div>
         </div>
 
-        {/* NOTA: Removido o fixed height 'h-[1414px]' daqui para a tabela crescer livremente */}
         <div id="export-page-2" className="bg-white text-slate-800 p-8 w-[1000px]">
           <h2 className="text-2xl font-black text-slate-800 mb-6 border-b border-slate-200 pb-4">Matriz Analítica - Equipamentos por Ano</h2>
           <table className="w-full text-left border-collapse border border-slate-300">
