@@ -93,7 +93,7 @@ const ControleRos = () => {
   const handleSubmitRO = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-
+    
     try {
       const mesOcorrencia = formData.data_ocorrencia 
         ? formData.data_ocorrencia.substring(5, 7) 
@@ -150,7 +150,6 @@ const ControleRos = () => {
   const mesesDisponiveis = [...new Set(ros.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(5, 7) : null).filter(Boolean))].sort();
   const nomeMeses = { '01':'Janeiro', '02':'Fevereiro', '03':'Março', '04':'Abril', '05':'Maio', '06':'Junho', '07':'Julho', '08':'Agosto', '09':'Setembro', '10':'Outubro', '11':'Novembro', '12':'Dezembro' };
 
-
   // ==============================
   // PROCESSAMENTO DOS KPIs E GRÁFICOS (Usando rosFiltradas)
   // ==============================
@@ -159,32 +158,31 @@ const ControleRos = () => {
   const custoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custoTotal);
   const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
 
-  const dadosGraficoMensal = rosFiltradas.reduce((acc, curr) => {
-    if (curr.data_ocorrencia) {
-      // Extrai ano (ex: "25") e mês (ex: "01")
-      const ano = curr.data_ocorrencia.substring(2, 4); 
-      const mesStr = curr.data_ocorrencia.substring(5, 7); 
+  // NOVA LÓGICA DO GRÁFICO: Ordenado e com inclusão do Ano
+  const dadosGraficoMensal = Object.values(rosFiltradas.reduce((acc, curr) => {
+    if (curr.data_ocorrencia && curr.data_ocorrencia.length >= 7) {
+      const ano = curr.data_ocorrencia.substring(0, 4);
+      const mesStr = curr.data_ocorrencia.substring(5, 7);
+      const chave = `${ano}-${mesStr}`; // ex: 2025-01 para ordenação
       
-      const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
-      const label = `${mesAbrev}/${ano}`; 
-      const sortKey = curr.data_ocorrencia.substring(0, 7); 
-
-      const itemExistente = acc.find(item => item.name === label);
-      if (itemExistente) {
-        itemExistente.Ocorrencias += 1;
-      } else {
-        acc.push({ name: label, Ocorrencias: 1, sortKey });
+      if (!acc[chave]) {
+        const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
+        acc[chave] = { 
+          name: `${mesAbrev}/${ano}`, // Ex: JAN/2025
+          Ocorrencias: 0,
+          chaveOrdenacao: chave
+        };
       }
+      acc[chave].Ocorrencias += 1;
     }
     return acc;
-  }, [])
-  .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, {})).sort((a, b) => a.chaveOrdenacao.localeCompare(b.chaveOrdenacao));
 
   const processarComparativoAnual = () => {
     const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const dadosAnuais = meses.map(m => ({ name: m }));
     const anosPresentes = [...new Set(rosFiltradas.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(0, 4) : null).filter(Boolean))];
-
+    
     rosFiltradas.forEach(r => {
       if (!r.data_ocorrencia) return;
       const ano = r.data_ocorrencia.substring(0, 4);
@@ -195,6 +193,7 @@ const ControleRos = () => {
         linha[ano] = (linha[ano] || 0) + 1;
       }
     });
+    
     return { dados: dadosAnuais, anos: anosPresentes.sort() };
   };
   const { dados: comparativoAnual, anos: anosDisponiveis } = processarComparativoAnual();
@@ -357,35 +356,28 @@ const ControleRos = () => {
                    </div>
                 </div>
 
-                {/* GRÁFICO HISTÓRICO MENSAL GERAL */}
-              <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col min-h-[350px]">
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
-                  <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
-                </h3>
-                
-                {/* Container com Scroll Horizontal */}
-                <div className="flex-grow w-full overflow-x-auto pb-4 custom-scrollbar">
-                  {/* Largura dinâmica baseada na quantidade de dados. Garante espaço para as barras. */}
-                  <div style={{ minWidth: `${Math.max(dadosGraficoMensal.length * 65, 100)}%`, height: '250px' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip 
-                          cursor={{ fill: 'rgba(255,255,255,0.05)' }} 
-                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} 
-                        />
-                        <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
-                          {dadosGraficoMensal.map((entry, index) => (
-                            <Cell 
-                              key={`cell-${index}`} 
-                              fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} 
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col min-h-[350px]">
+                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
+                     <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
+                   </h3>
+                   {/* SCROLL HORIZONTAL APLICADO AQUI */}
+                   <div className="flex-grow w-full h-full overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 transparent' }}>
+                     {/* Largura mínima dinâmica: 60px por barra para evitar esmagamento */}
+                     <div style={{ minWidth: `${Math.max(dadosGraficoMensal.length * 60, 400)}px`, height: '100%' }}>
+                       <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                           <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                           <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
+                           <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
+                             {dadosGraficoMensal.map((entry, index) => (
+                               <Cell key={`cell-${index}`} fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} />
+                             ))}
+                           </Bar>
+                         </BarChart>
+                       </ResponsiveContainer>
+                     </div>
+                   </div>
                 </div>
               </div>
 
@@ -594,7 +586,7 @@ const ControleRos = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase ml-1">Equipamento / Placa *</label>
+                   <label className="text-xs font-bold text-slate-400 uppercase ml-1">Equipamento / Placa *</label>
                   <input required name="equipamento" value={formData.equipamento} onChange={handleInputChange} type="text" placeholder="Ex: CAV-102" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all uppercase" />
                 </div>
                 
@@ -644,7 +636,7 @@ const ControleRos = () => {
 
               {/* Footer Modal / Submit */}
               <div className="mt-4 flex justify-end gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
+                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={isSubmitting} className={`flex items-center gap-2 text-white px-8 py-3 rounded-xl font-bold transition-colors shadow-lg disabled:opacity-50 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#10b981] hover:bg-[#0e9f6e]'}`}>
@@ -657,7 +649,7 @@ const ControleRos = () => {
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style>{`
         @keyframes fade-in { 
           from { opacity: 0; transform: translateY(10px); } 
           to { opacity: 1; transform: translateY(0); } 
@@ -665,23 +657,7 @@ const ControleRos = () => {
         .animate-fade-in { 
           animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-        
-        /* Customização elegante para o scrollbar do gráfico */
-        .custom-scrollbar::-webkit-scrollbar {
-          height: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.02);
-          border-radius: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(15, 76, 129, 0.5);
-          border-radius: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(16, 185, 129, 0.5);
-        }
-      `}} />
+      `}</style>
     </div>
   );
 };
