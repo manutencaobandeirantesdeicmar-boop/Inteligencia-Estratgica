@@ -159,16 +159,19 @@ const ControleRos = () => {
   const custoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custoTotal);
   const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
 
+  
   const dadosGraficoMensal = rosFiltradas.reduce((acc, curr) => {
-    if (curr.mes || (curr.data_ocorrencia && curr.data_ocorrencia.substring(5,7))) {
-      const mesStr = curr.mes || curr.data_ocorrencia.substring(5,7);
-      const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
+    if (curr.data_ocorrencia) {
+      const data = new Date(curr.data_ocorrencia);
+      // Formata para "JAN/26"
+      const mesAbrev = data.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).toUpperCase();
+      
       const itemExistente = acc.find(item => item.name === mesAbrev);
       if (itemExistente) itemExistente.Ocorrencias += 1;
-      else acc.push({ name: mesAbrev, Ocorrencias: 1 });
+      else acc.push({ name: mesAbrev, Ocorrencias: 1, sortValue: data.getTime() });
     }
     return acc;
-  }, []).reverse();
+  }, []).sort((a, b) => a.sortValue - b.sortValue); // Ordena cronologicamente
 
   const processarComparativoAnual = () => {
     const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -351,7 +354,8 @@ const ControleRos = () => {
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
                      <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
                    </h3>
-                   <div className="flex-grow w-full h-full">
+                  <div className="flex-grow w-full overflow-x-auto pb-2">
+                   <div style={{ minWidth: `${dadosGraficoMensal.length * 60}px`, height: '250px' }}>
                      <ResponsiveContainer width="100%" height="100%">
                        <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                          <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
@@ -365,7 +369,7 @@ const ControleRos = () => {
                        </BarChart>
                      </ResponsiveContainer>
                    </div>
-                </div>
+                 </div>
               </div>
 
               {/* RANKINGS */}
