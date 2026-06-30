@@ -160,15 +160,25 @@ const ControleRos = () => {
   const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
 
   const dadosGraficoMensal = rosFiltradas.reduce((acc, curr) => {
-    if (curr.mes || (curr.data_ocorrencia && curr.data_ocorrencia.substring(5,7))) {
-      const mesStr = curr.mes || curr.data_ocorrencia.substring(5,7);
+    if (curr.data_ocorrencia) {
+      // Extrai ano (ex: "25") e mês (ex: "01")
+      const ano = curr.data_ocorrencia.substring(2, 4); 
+      const mesStr = curr.data_ocorrencia.substring(5, 7); 
+      
       const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
-      const itemExistente = acc.find(item => item.name === mesAbrev);
-      if (itemExistente) itemExistente.Ocorrencias += 1;
-      else acc.push({ name: mesAbrev, Ocorrencias: 1 });
+      const label = `${mesAbrev}/${ano}`; 
+      const sortKey = curr.data_ocorrencia.substring(0, 7); 
+
+      const itemExistente = acc.find(item => item.name === label);
+      if (itemExistente) {
+        itemExistente.Ocorrencias += 1;
+      } else {
+        acc.push({ name: label, Ocorrencias: 1, sortKey });
+      }
     }
     return acc;
-  }, []).reverse();
+  }, [])
+  .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
   const processarComparativoAnual = () => {
     const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -347,24 +357,35 @@ const ControleRos = () => {
                    </div>
                 </div>
 
-                <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col min-h-[350px]">
-                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
-                     <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
-                   </h3>
-                   <div className="flex-grow w-full h-full">
-                     <ResponsiveContainer width="100%" height="100%">
-                       <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                         <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                         <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                         <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
-                         <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
-                           {dadosGraficoMensal.map((entry, index) => (
-                             <Cell key={`cell-${index}`} fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} />
-                           ))}
-                         </Bar>
-                       </BarChart>
-                     </ResponsiveContainer>
-                   </div>
+                {/* GRÁFICO HISTÓRICO MENSAL GERAL */}
+              <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col min-h-[350px]">
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
+                  <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
+                </h3>
+                
+                {/* Container com Scroll Horizontal */}
+                <div className="flex-grow w-full overflow-x-auto pb-4 custom-scrollbar">
+                  {/* Largura dinâmica baseada na quantidade de dados. Garante espaço para as barras. */}
+                  <div style={{ minWidth: `${Math.max(dadosGraficoMensal.length * 65, 100)}%`, height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                          cursor={{ fill: 'rgba(255,255,255,0.05)' }} 
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} 
+                        />
+                        <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
+                          {dadosGraficoMensal.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} 
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
 
@@ -636,7 +657,7 @@ const ControleRos = () => {
         </div>
       )}
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes fade-in { 
           from { opacity: 0; transform: translateY(10px); } 
           to { opacity: 1; transform: translateY(0); } 
@@ -644,7 +665,23 @@ const ControleRos = () => {
         .animate-fade-in { 
           animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-      `}</style>
+        
+        /* Customização elegante para o scrollbar do gráfico */
+        .custom-scrollbar::-webkit-scrollbar {
+          height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+          border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(15, 76, 129, 0.5);
+          border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(16, 185, 129, 0.5);
+        }
+      `}} />
     </div>
   );
 };
