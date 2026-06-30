@@ -24,7 +24,7 @@ const ControleRos = () => {
   // ==============================
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState(null); // Se null = Nova RO; Se tem ID = Editando
+  const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     equipamento: '',
     data_ocorrencia: '',
