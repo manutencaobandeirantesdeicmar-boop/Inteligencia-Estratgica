@@ -2,22 +2,57 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, BarChart2, TrendingUp, AlertCircle, FileWarning, 
-  Loader2, Layout, Columns, Table, Info, X, Save, Search, Filter, Edit
+  Loader2, Layout, Columns, Table, Info, X, Save, Search, Filter, Edit, Download
 } from 'lucide-react';
 import { supabase } from '../services/supabase-config';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const ControleRos = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [ros, setRos] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-
+  
   // ==============================
   // ESTADOS DE FILTRO
   // ==============================
   const [buscaPlaca, setBuscaPlaca] = useState('');
   const [filtroMes, setFiltroMes] = useState('');
+
+  // ==============================
+  // EXPORTAÇÃO PARA PDF
+  // ==============================
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportPDF = async () => {
+    const element = document.getElementById('dashboard-export-area');
+    if (!element) return;
+
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2, 
+        backgroundColor: '#030712', 
+        useCORS: true, 
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save('Resumo_Dashboard_ROs.pdf');
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      alert("Erro ao gerar o relatório em PDF.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // ==============================
   // ESTADOS DO MODAL (CRIAR/EDITAR)
@@ -45,7 +80,7 @@ const ControleRos = () => {
       .from('controle_ros')
       .select('*')
       .order('data_ocorrencia', { ascending: false });
-
+      
     if (!error && data) {
       setRos(data);
     } else {
@@ -98,7 +133,7 @@ const ControleRos = () => {
       const mesOcorrencia = formData.data_ocorrencia 
         ? formData.data_ocorrencia.substring(5, 7) 
         : null;
-
+        
       const payload = {
         equipamento: formData.equipamento.toUpperCase(),
         data_ocorrencia: formData.data_ocorrencia || null,
@@ -110,7 +145,7 @@ const ControleRos = () => {
         numero_ro: formData.numero_ro || null,
         mes: mesOcorrencia
       };
-
+      
       if (editingId) {
         // ATUALIZAR RO EXISTENTE
         const { error } = await supabase
@@ -145,11 +180,11 @@ const ControleRos = () => {
     const matchMes = filtroMes === '' || (r.data_ocorrencia && r.data_ocorrencia.substring(5, 7) === filtroMes);
     return matchPlaca && matchMes;
   });
-
+  
   // Lista de meses disponíveis nos dados para o Dropdown de Filtro
   const mesesDisponiveis = [...new Set(ros.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(5, 7) : null).filter(Boolean))].sort();
   const nomeMeses = { '01':'Janeiro', '02':'Fevereiro', '03':'Março', '04':'Abril', '05':'Maio', '06':'Junho', '07':'Julho', '08':'Agosto', '09':'Setembro', '10':'Outubro', '11':'Novembro', '12':'Dezembro' };
-
+  
   // ==============================
   // PROCESSAMENTO DOS KPIs E GRÁFICOS (Usando rosFiltradas)
   // ==============================
@@ -157,7 +192,7 @@ const ControleRos = () => {
   const custoTotal = rosFiltradas.reduce((acc, curr) => acc + (Number(curr.custo_avaria) || 0), 0);
   const custoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custoTotal);
   const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
-
+  
   // NOVA LÓGICA DO GRÁFICO: Ordenado e com inclusão do Ano
   const dadosGraficoMensal = Object.values(rosFiltradas.reduce((acc, curr) => {
     if (curr.data_ocorrencia && curr.data_ocorrencia.length >= 7) {
@@ -167,6 +202,7 @@ const ControleRos = () => {
       
       if (!acc[chave]) {
         const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
+       
         acc[chave] = { 
           name: `${mesAbrev}/${ano}`, // Ex: JAN/2025
           Ocorrencias: 0,
@@ -177,7 +213,7 @@ const ControleRos = () => {
     }
     return acc;
   }, {})).sort((a, b) => a.chaveOrdenacao.localeCompare(b.chaveOrdenacao));
-
+  
   const processarComparativoAnual = () => {
     const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const dadosAnuais = meses.map(m => ({ name: m }));
@@ -197,32 +233,34 @@ const ControleRos = () => {
     return { dados: dadosAnuais, anos: anosPresentes.sort() };
   };
   const { dados: comparativoAnual, anos: anosDisponiveis } = processarComparativoAnual();
-
+  
   const contagemEquipamentos = rosFiltradas.reduce((acc, curr) => {
     if (curr.equipamento) acc[curr.equipamento] = (acc[curr.equipamento] || 0) + 1;
     return acc;
   }, {});
+  
   const rankingEquipamentos = Object.entries(contagemEquipamentos)
     .map(([equipamento, quantidade]) => ({ equipamento, quantidade }))
     .sort((a, b) => b.quantidade - a.quantidade)
     .slice(0, 5);
-
+    
   const contagemTipos = rosFiltradas.reduce((acc, curr) => {
     if (curr.tipo) acc[curr.tipo] = (acc[curr.tipo] || 0) + 1;
     return acc;
   }, {});
+  
   const rankingTipos = Object.entries(contagemTipos)
     .map(([tipo, quantidade]) => ({ tipo, quantidade }))
     .sort((a, b) => b.quantidade - a.quantidade)
     .slice(0, 5);
-
+    
   // ==============================
   // PROCESSAMENTO DO KANBAN
   // ==============================
   const kAguardandoSolicitacao = rosFiltradas.filter(r => r.data_ocorrencia && !r.numero_ro && (!r.data_solicitacao || !r.numero_chamado));
   const kAguardandoRo = rosFiltradas.filter(r => !r.numero_ro && r.data_solicitacao && r.numero_chamado);
   const kConcluido = rosFiltradas.filter(r => r.numero_ro);
-
+  
   return (
     <div className="min-h-screen w-full bg-[#030712] text-white p-6 md:p-8 relative overflow-hidden font-sans">
       <div className="absolute top-[-10%] left-[-5%] w-[600px] h-[600px] bg-[#0f4c81]/10 rounded-full blur-[100px] pointer-events-none"></div>
@@ -241,10 +279,22 @@ const ControleRos = () => {
           <p className="text-slate-500 text-sm font-bold mt-1 uppercase tracking-wider">Gestão e Relatórios de Ocorrência</p>
         </div>
         
-        <button onClick={abrirModalNovaRo} className="flex items-center gap-2 bg-gradient-to-r from-[#10b981] to-[#0e9f6e] hover:brightness-110 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] z-30">
-          <Plus size={20} />
-          Registrar Nova RO
-        </button>
+        <div className="flex items-center gap-3 z-30">
+          <button 
+            onClick={handleExportPDF} 
+            disabled={isExporting || activeTab !== 'dashboard'}
+            className="flex items-center gap-2 bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 px-4 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title={activeTab !== 'dashboard' ? "Acesse a aba 'Visão Geral' para exportar" : "Exportar Dashboard em PDF"}
+          >
+            {isExporting ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
+            <span className="hidden sm:inline">{isExporting ? 'Gerando...' : 'Exportar PDF'}</span>
+          </button>
+
+          <button onClick={abrirModalNovaRo} className="flex items-center gap-2 bg-gradient-to-r from-[#10b981] to-[#0e9f6e] hover:brightness-110 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)]">
+            <Plus size={20} />
+            Registrar Nova RO
+          </button>
+        </div>
       </header>
 
       {/* BARRA DE FERRAMENTAS: ABAS E FILTROS */}
@@ -304,7 +354,7 @@ const ControleRos = () => {
               ABA 1: DASHBOARD GERAL
              ========================================= */}
           {activeTab === 'dashboard' && (
-            <>
+            <div id="dashboard-export-area" className="p-2 -m-2">
               {/* GRID DE KPIS */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg relative overflow-hidden group">
@@ -368,7 +418,7 @@ const ControleRos = () => {
                          <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                            <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                            <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} itemStyle={{ color: '#ffffff', fontWeight: 'bold' }} labelStyle={{ color: '#cbd5e1', fontWeight: 'bold', paddingBottom: '4px' }} />
+                           <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
                            <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
                              {dadosGraficoMensal.map((entry, index) => (
                                <Cell key={`cell-${index}`} fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} />
@@ -382,7 +432,7 @@ const ControleRos = () => {
               </div>
 
               {/* RANKINGS */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
                      <AlertCircle className="text-amber-500"/> Top 5 Equipamentos com Avarias
@@ -390,7 +440,7 @@ const ControleRos = () => {
                    <div className="flex flex-col gap-3">
                      {rankingEquipamentos.map((item, index) => (
                        <div key={item.equipamento} className="flex items-center justify-between bg-white/[0.03] border border-white/5 p-4 rounded-2xl hover:bg-white/[0.06] transition-colors">
-                         <div className="flex items-center gap-4">
+                           <div className="flex items-center gap-4">
                            <span className={`text-lg font-black w-6 text-center ${index === 0 ? 'text-red-500' : index === 1 ? 'text-amber-500' : 'text-slate-500'}`}>{index + 1}º</span>
                            <div>
                              <p className="font-black text-white">{item.equipamento}</p>
@@ -398,39 +448,39 @@ const ControleRos = () => {
                            </div>
                          </div>
                          <div className="bg-white/10 px-3 py-1 rounded-lg text-sm font-black">{item.quantidade} <span className="text-[10px] font-normal text-slate-400">ROs</span></div>
-                       </div>
+                        </div>
                      ))}
                    </div>
                 </div>
 
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col">
-                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
                      <FileWarning className="text-red-500"/> Ranking por Tipo de Ocorrência
                    </h3>
                    <div className="flex flex-col gap-3">
-                     {rankingTipos.map((item, index) => (
+                      {rankingTipos.map((item, index) => (
                        <div key={item.tipo} className="flex items-center justify-between bg-white/[0.03] border border-white/5 p-4 rounded-2xl hover:bg-white/[0.06] transition-colors">
                          <div className="flex items-center gap-4">
-                           <span className={`text-lg font-black w-6 text-center ${index === 0 ? 'text-red-500' : index === 1 ? 'text-amber-500' : 'text-slate-500'}`}>{index + 1}º</span>
+                            <span className={`text-lg font-black w-6 text-center ${index === 0 ? 'text-red-500' : index === 1 ? 'text-amber-500' : 'text-slate-500'}`}>{index + 1}º</span>
                            <div>
                              <p className="font-black text-white capitalize">{item.tipo || 'Não Definido'}</p>
                              <p className="text-[10px] text-slate-400 font-bold uppercase">Categoria</p>
                            </div>
                          </div>
-                         <div className="bg-white/10 px-3 py-1 rounded-lg text-sm font-black">{item.quantidade} <span className="text-[10px] font-normal text-slate-400">QTD</span></div>
+                          <div className="bg-white/10 px-3 py-1 rounded-lg text-sm font-black">{item.quantidade} <span className="text-[10px] font-normal text-slate-400">QTD</span></div>
                        </div>
                      ))}
                    </div>
-                </div>
+                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* =========================================
               ABA 2: KANBAN DE ACOMPANHAMENTO
              ========================================= */}
           {activeTab === 'kanban' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[70vh]">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[70vh]">
               {/* Coluna 1: Aguardando Solicitação */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-red-500/10 p-3 rounded-xl border border-red-500/20">
@@ -440,34 +490,34 @@ const ControleRos = () => {
                 {kAguardandoSolicitacao.map(item => (
                   <div 
                     key={item.id} 
-                    onClick={() => abrirModalEdicao(item)}
+                     onClick={() => abrirModalEdicao(item)}
                     className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-red-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative"
                   >
                     <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-red-400 transition-all" />
-                    <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
+                     <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400 mb-2">Ocorrência: <span className="text-slate-200">{item.data_ocorrencia}</span></p>
                     <span className="inline-block px-2 py-1 bg-red-500/20 text-red-300 text-[10px] rounded uppercase font-bold">{item.tipo}</span>
                   </div>
-                ))}
+                 ))}
               </div>
 
               {/* Coluna 2: Aguardando RO */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                  <h3 className="font-bold text-amber-400 uppercase text-xs tracking-widest">Aguardando RO</h3>
+                   <h3 className="font-bold text-amber-400 uppercase text-xs tracking-widest">Aguardando RO</h3>
                   <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs font-black">{kAguardandoRo.length}</span>
                 </div>
                 {kAguardandoRo.map(item => (
                   <div 
-                    key={item.id} 
+                     key={item.id} 
                     onClick={() => abrirModalEdicao(item)}
                     className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-amber-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative"
                   >
-                    <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-amber-400 transition-all" />
+                     <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-amber-400 transition-all" />
                     <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400">Solicitado: <span className="text-slate-200">{item.data_solicitacao}</span></p>
                     <p className="text-xs text-slate-400 mb-2">Chamado: <span className="text-amber-300 font-bold">{item.numero_chamado}</span></p>
-                    <span className="inline-block px-2 py-1 bg-amber-500/20 text-amber-300 text-[10px] rounded uppercase font-bold">{item.tipo}</span>
+                     <span className="inline-block px-2 py-1 bg-amber-500/20 text-amber-300 text-[10px] rounded uppercase font-bold">{item.tipo}</span>
                   </div>
                 ))}
               </div>
@@ -478,7 +528,7 @@ const ControleRos = () => {
                   <h3 className="font-bold text-[#10b981] uppercase text-xs tracking-widest">RO Finalizada (OK)</h3>
                   <span className="bg-[#10b981]/20 text-[#10b981] px-2 py-1 rounded text-xs font-black">{kConcluido.length}</span>
                 </div>
-                {kConcluido.map(item => (
+                 {kConcluido.map(item => (
                   <div 
                     key={item.id} 
                     onClick={() => abrirModalEdicao(item)}
@@ -492,7 +542,7 @@ const ControleRos = () => {
                 ))}
               </div>
             </div>
-          )}
+           )}
 
           {/* =========================================
               ABA 3: TABELA INTERATIVA
@@ -500,32 +550,32 @@ const ControleRos = () => {
           {activeTab === 'tabela' && (
             <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-widest">
                       <th className="p-4 font-bold">Equipamento (Passe o Mouse)</th>
-                      <th className="p-4 font-bold">Data Ocorrência</th>
+                       <th className="p-4 font-bold">Data Ocorrência</th>
                       <th className="p-4 font-bold">Status</th>
                       <th className="p-4 font-bold">Nº RO</th>
                       <th className="p-4 font-bold text-center">Ações</th>
-                    </tr>
+                     </tr>
                   </thead>
                   <tbody>
                     {rosFiltradas.map((item, idx) => (
                       <tr key={idx} className="border-b border-white/5 hover:bg-white/[0.04] transition-colors group relative cursor-help">
-                        <td className="p-4 font-black text-white relative">
+                         <td className="p-4 font-black text-white relative">
                           <div className="flex items-center gap-2">
                             {item.equipamento}
-                            <Info size={14} className="text-slate-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                             <Info size={14} className="text-slate-500 opacity-50 group-hover:opacity-100 transition-opacity" />
                           </div>
                           <div className="absolute left-4 top-12 z-50 hidden group-hover:flex flex-col gap-1 w-64 bg-[#0f172a] border border-[#10b981]/30 p-4 rounded-xl shadow-2xl">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Detalhes da Avaria</p>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Detalhes da Avaria</p>
                             <p className="text-sm"><span className="text-slate-500">Data:</span> <span className="text-white">{item.data_ocorrencia}</span></p>
                             <p className="text-sm"><span className="text-slate-500">Tipo:</span> <span className="text-[#10b981] font-bold">{item.tipo || 'N/A'}</span></p>
                             <p className="text-sm mt-1 text-slate-300 italic">"{item.avaria || 'Sem descrição informada.'}"</p>
                           </div>
                         </td>
-                        <td className="p-4 text-sm text-slate-300">{item.data_ocorrencia || '-'}</td>
+                         <td className="p-4 text-sm text-slate-300">{item.data_ocorrencia || '-'}</td>
                         <td className="p-4">
                           {item.numero_ro ? (
                             <span className="bg-[#10b981]/20 text-[#10b981] px-2 py-1 rounded text-xs font-black uppercase">Finalizado</span>
@@ -537,7 +587,7 @@ const ControleRos = () => {
                         <td className="p-4 text-center">
                           <button 
                             onClick={() => abrirModalEdicao(item)}
-                            className="text-slate-400 hover:text-[#10b981] bg-white/5 hover:bg-white/10 p-2 rounded-lg transition-colors"
+                             className="text-slate-400 hover:text-[#10b981] bg-white/5 hover:bg-white/10 p-2 rounded-lg transition-colors"
                             title="Editar Registro"
                           >
                             <Edit size={16} />
@@ -545,18 +595,18 @@ const ControleRos = () => {
                         </td>
                       </tr>
                     ))}
-                    {rosFiltradas.length === 0 && (
+                     {rosFiltradas.length === 0 && (
                       <tr>
                         <td colSpan="5" className="p-8 text-center text-slate-500 font-bold">Nenhum registro encontrado para os filtros atuais.</td>
                       </tr>
-                    )}
+                     )}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
         </div>
-      )}
+        )}
 
       {/* =========================================
           MODAL DE NOVA/EDITAR RO
@@ -565,7 +615,7 @@ const ControleRos = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center items-center p-4 animate-fade-in">
           <div className="bg-[#0f172a] border border-white/10 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             
-            {/* Header Modal */}
+             {/* Header Modal */}
             <div className="flex justify-between items-center p-6 border-b border-white/10 bg-white/[0.02]">
               <div>
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
@@ -579,22 +629,22 @@ const ControleRos = () => {
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-2 rounded-xl">
                 <X size={20} />
               </button>
-            </div>
+             </div>
 
             {/* Body Modal (Formulário) */}
             <form onSubmit={handleSubmitRO} className="p-6 overflow-y-auto flex flex-col gap-4">
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                   <label className="text-xs font-bold text-slate-400 uppercase ml-1">Equipamento / Placa *</label>
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Equipamento / Placa *</label>
                   <input required name="equipamento" value={formData.equipamento} onChange={handleInputChange} type="text" placeholder="Ex: CAV-102" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all uppercase" />
                 </div>
                 
-                <div className="flex flex-col gap-1.5">
+                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-400 uppercase ml-1">Data da Ocorrência *</label>
                   <input required name="data_ocorrencia" value={formData.data_ocorrencia} onChange={handleInputChange} type="date" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all [color-scheme:dark]" />
                 </div>
-              </div>
+               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
@@ -620,7 +670,7 @@ const ControleRos = () => {
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Data Solicitação</label>
                     <input name="data_solicitacao" value={formData.data_solicitacao} onChange={handleInputChange} type="date" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all [color-scheme:dark]" />
-                  </div>
+                   </div>
                   
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Nº Chamado</label>
@@ -636,7 +686,7 @@ const ControleRos = () => {
 
               {/* Footer Modal / Submit */}
               <div className="mt-4 flex justify-end gap-3">
-                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={isSubmitting} className={`flex items-center gap-2 text-white px-8 py-3 rounded-xl font-bold transition-colors shadow-lg disabled:opacity-50 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#10b981] hover:bg-[#0e9f6e]'}`}>
@@ -651,7 +701,7 @@ const ControleRos = () => {
 
       <style>{`
         @keyframes fade-in { 
-          from { opacity: 0; transform: translateY(10px); } 
+           from { opacity: 0; transform: translateY(10px); } 
           to { opacity: 1; transform: translateY(0); } 
         }
         .animate-fade-in { 
