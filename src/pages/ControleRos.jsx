@@ -350,28 +350,35 @@ const ControleRos = () => {
                    </div>
                 </div>
 
-               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col min-h-[350px]">
-  <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
-    <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
-  </h3>
-  
-  <div className="flex-grow w-full overflow-x-auto pb-2">
-    <div style={{ minWidth: `${dadosGraficoMensal.length * 60}px`, height: '250px' }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-          <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-          <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-          <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
-          <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
-            {dadosGraficoMensal.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  </div>
-</div>
+               {/* GRÁFICO HISTÓRICO MENSAL GERAL */}
+              <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col min-h-[350px]">
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
+                  <BarChart2 className="text-[#10b981]"/> Histórico Mensal Geral
+                </h3>
+                
+                <div className="flex-grow w-full overflow-x-auto pb-2">
+                  <div style={{ minWidth: `${dadosGraficoMensal.length * 60}px`, height: '250px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dadosGraficoMensal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                          cursor={{ fill: 'rgba(255,255,255,0.05)' }} 
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} 
+                        />
+                        <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
+                          {dadosGraficoMensal.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} 
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
 
               {/* RANKINGS */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
