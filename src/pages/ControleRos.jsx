@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, BarChart2, TrendingUp, AlertCircle, FileWarning, 
-  Loader2, Layout, Columns, Table, Info, X, Save
+  Loader2, Layout, Columns, Table, Info, X, Save, Search, Filter, Edit
 } from 'lucide-react';
 import { supabase } from '../services/supabase-config';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
@@ -14,10 +14,17 @@ const ControleRos = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
 
   // ==============================
-  // ESTADOS DO MODAL NOVA RO
+  // ESTADOS DE FILTRO
+  // ==============================
+  const [buscaPlaca, setBuscaPlaca] = useState('');
+  const [filtroMes, setFiltroMes] = useState('');
+
+  // ==============================
+  // ESTADOS DO MODAL (CRIAR/EDITAR)
   // ==============================
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState(null); // Se null = Nova RO; Se tem ID = Editando
   const [formData, setFormData] = useState({
     equipamento: '',
     data_ocorrencia: '',
@@ -52,11 +59,35 @@ const ControleRos = () => {
   }, []);
 
   // ==============================
-  // HANDLERS DO FORMULÁRIO
+  // HANDLERS DO FORMULÁRIO E MODAL
   // ==============================
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const abrirModalNovaRo = () => {
+    setEditingId(null);
+    setFormData({
+      equipamento: '', data_ocorrencia: '', tipo: '', avaria: '', 
+      custo_avaria: '', data_solicitacao: '', numero_chamado: '', numero_ro: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const abrirModalEdicao = (item) => {
+    setEditingId(item.id);
+    setFormData({
+      equipamento: item.equipamento || '',
+      data_ocorrencia: item.data_ocorrencia || '',
+      tipo: item.tipo || '',
+      avaria: item.avaria || '',
+      custo_avaria: item.custo_avaria || '',
+      data_solicitacao: item.data_solicitacao || '',
+      numero_chamado: item.numero_chamado || '',
+      numero_ro: item.numero_ro || ''
+    });
+    setIsModalOpen(true);
   };
 
   const handleSubmitRO = async (e) => {
@@ -64,13 +95,11 @@ const ControleRos = () => {
     setIsSubmitting(true);
 
     try {
-      // Extrai o mês para os gráficos (formato MM)
       const mesOcorrencia = formData.data_ocorrencia 
         ? formData.data_ocorrencia.substring(5, 7) 
         : null;
 
-      // Monta o objeto para inserir, tratando os campos numéricos/vazios
-      const novaRo = {
+      const payload = {
         equipamento: formData.equipamento.toUpperCase(),
         data_ocorrencia: formData.data_ocorrencia || null,
         tipo: formData.tipo,
@@ -79,44 +108,61 @@ const ControleRos = () => {
         data_solicitacao: formData.data_solicitacao || null,
         numero_chamado: formData.numero_chamado || null,
         numero_ro: formData.numero_ro || null,
-        mes: mesOcorrencia // Salva o mês se sua tabela utilizar essa coluna para o gráfico
+        mes: mesOcorrencia
       };
 
-      const { error } = await supabase
-        .from('controle_ros')
-        .insert([novaRo]);
+      if (editingId) {
+        // ATUALIZAR RO EXISTENTE
+        const { error } = await supabase
+          .from('controle_ros')
+          .update(payload)
+          .eq('id', editingId);
+        if (error) throw error;
+      } else {
+        // INSERIR NOVA RO
+        const { error } = await supabase
+          .from('controle_ros')
+          .insert([payload]);
+        if (error) throw error;
+      }
 
-      if (error) throw error;
-
-      // Limpa o form, fecha o modal e recarrega os dados
-      setFormData({
-        equipamento: '', data_ocorrencia: '', tipo: '', avaria: '', 
-        custo_avaria: '', data_solicitacao: '', numero_chamado: '', numero_ro: ''
-      });
       setIsModalOpen(false);
-      fetchControleRos();
+      fetchControleRos(); // Recarrega os dados
 
     } catch (error) {
       console.error("Erro ao salvar RO:", error);
-      alert("Erro ao registrar a RO. Verifique o console.");
+      alert("Erro ao salvar os dados. Verifique o console.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // ==============================
+  // APLICAÇÃO DOS FILTROS GLOBAIS
+  // ==============================
+  const rosFiltradas = ros.filter(r => {
+    const matchPlaca = buscaPlaca === '' || (r.equipamento && r.equipamento.toLowerCase().includes(buscaPlaca.toLowerCase()));
+    const matchMes = filtroMes === '' || (r.data_ocorrencia && r.data_ocorrencia.substring(5, 7) === filtroMes);
+    return matchPlaca && matchMes;
+  });
+
+  // Lista de meses disponíveis nos dados para o Dropdown de Filtro
+  const mesesDisponiveis = [...new Set(ros.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(5, 7) : null).filter(Boolean))].sort();
+  const nomeMeses = { '01':'Janeiro', '02':'Fevereiro', '03':'Março', '04':'Abril', '05':'Maio', '06':'Junho', '07':'Julho', '08':'Agosto', '09':'Setembro', '10':'Outubro', '11':'Novembro', '12':'Dezembro' };
+
 
   // ==============================
-  // PROCESSAMENTO DOS KPIs E GRÁFICOS
+  // PROCESSAMENTO DOS KPIs E GRÁFICOS (Usando rosFiltradas)
   // ==============================
-  const totalRos = ros.length;
-  const custoTotal = ros.reduce((acc, curr) => acc + (Number(curr.custo_avaria) || 0), 0);
+  const totalRos = rosFiltradas.length;
+  const custoTotal = rosFiltradas.reduce((acc, curr) => acc + (Number(curr.custo_avaria) || 0), 0);
   const custoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custoTotal);
-  const rosAbertas = ros.filter(r => !r.numero_ro).length;
+  const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
 
-  const dadosGraficoMensal = ros.reduce((acc, curr) => {
-    if (curr.mes) {
-      // Ajuste para pegar o mês escrito caso sua coluna 'mes' retorne número
-      const mesAbrev = curr.mes.length > 2 ? curr.mes.substring(0, 3).toUpperCase() : `MÊS ${curr.mes}`;
+  const dadosGraficoMensal = rosFiltradas.reduce((acc, curr) => {
+    if (curr.mes || (curr.data_ocorrencia && curr.data_ocorrencia.substring(5,7))) {
+      const mesStr = curr.mes || curr.data_ocorrencia.substring(5,7);
+      const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
       const itemExistente = acc.find(item => item.name === mesAbrev);
       if (itemExistente) itemExistente.Ocorrencias += 1;
       else acc.push({ name: mesAbrev, Ocorrencias: 1 });
@@ -127,9 +173,9 @@ const ControleRos = () => {
   const processarComparativoAnual = () => {
     const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const dadosAnuais = meses.map(m => ({ name: m }));
-    const anosPresentes = [...new Set(ros.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(0, 4) : null).filter(Boolean))];
+    const anosPresentes = [...new Set(rosFiltradas.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(0, 4) : null).filter(Boolean))];
 
-    ros.forEach(r => {
+    rosFiltradas.forEach(r => {
       if (!r.data_ocorrencia) return;
       const ano = r.data_ocorrencia.substring(0, 4);
       const mesIdx = parseInt(r.data_ocorrencia.substring(5, 7)) - 1;
@@ -143,7 +189,7 @@ const ControleRos = () => {
   };
   const { dados: comparativoAnual, anos: anosDisponiveis } = processarComparativoAnual();
 
-  const contagemEquipamentos = ros.reduce((acc, curr) => {
+  const contagemEquipamentos = rosFiltradas.reduce((acc, curr) => {
     if (curr.equipamento) acc[curr.equipamento] = (acc[curr.equipamento] || 0) + 1;
     return acc;
   }, {});
@@ -152,7 +198,7 @@ const ControleRos = () => {
     .sort((a, b) => b.quantidade - a.quantidade)
     .slice(0, 5);
 
-  const contagemTipos = ros.reduce((acc, curr) => {
+  const contagemTipos = rosFiltradas.reduce((acc, curr) => {
     if (curr.tipo) acc[curr.tipo] = (acc[curr.tipo] || 0) + 1;
     return acc;
   }, {});
@@ -164,9 +210,9 @@ const ControleRos = () => {
   // ==============================
   // PROCESSAMENTO DO KANBAN
   // ==============================
-  const kAguardandoSolicitacao = ros.filter(r => r.data_ocorrencia && !r.numero_ro && (!r.data_solicitacao || !r.numero_chamado));
-  const kAguardandoRo = ros.filter(r => !r.numero_ro && r.data_solicitacao && r.numero_chamado);
-  const kConcluido = ros.filter(r => r.numero_ro);
+  const kAguardandoSolicitacao = rosFiltradas.filter(r => r.data_ocorrencia && !r.numero_ro && (!r.data_solicitacao || !r.numero_chamado));
+  const kAguardandoRo = rosFiltradas.filter(r => !r.numero_ro && r.data_solicitacao && r.numero_chamado);
+  const kConcluido = rosFiltradas.filter(r => r.numero_ro);
 
   return (
     <div className="min-h-screen w-full bg-[#030712] text-white p-6 md:p-8 relative overflow-hidden font-sans">
@@ -186,23 +232,55 @@ const ControleRos = () => {
           <p className="text-slate-500 text-sm font-bold mt-1 uppercase tracking-wider">Gestão e Relatórios de Ocorrência</p>
         </div>
         
-        <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-[#10b981] to-[#0e9f6e] hover:brightness-110 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] z-30">
+        <button onClick={abrirModalNovaRo} className="flex items-center gap-2 bg-gradient-to-r from-[#10b981] to-[#0e9f6e] hover:brightness-110 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] z-30">
           <Plus size={20} />
           Registrar Nova RO
         </button>
       </header>
 
-      {/* CONTROLES DE ABAS */}
-      <div className="relative z-20 flex gap-2 mb-8 bg-white/[0.02] p-1.5 rounded-2xl w-fit border border-white/5 backdrop-blur-sm">
-        <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
-          <Layout size={18} /> Visão Geral
-        </button>
-        <button onClick={() => setActiveTab('kanban')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'kanban' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
-          <Columns size={18} /> Quadro Kanban
-        </button>
-        <button onClick={() => setActiveTab('tabela')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'tabela' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
-          <Table size={18} /> Tabela Interativa
-        </button>
+      {/* BARRA DE FERRAMENTAS: ABAS E FILTROS */}
+      <div className="relative z-20 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-8">
+        
+        {/* Abas */}
+        <div className="flex gap-2 bg-white/[0.02] p-1.5 rounded-2xl w-fit border border-white/5 backdrop-blur-sm">
+          <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
+            <Layout size={18} /> Visão Geral
+          </button>
+          <button onClick={() => setActiveTab('kanban')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'kanban' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
+            <Columns size={18} /> Quadro Kanban
+          </button>
+          <button onClick={() => setActiveTab('tabela')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'tabela' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
+            <Table size={18} /> Tabela Interativa
+          </button>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+          <div className="relative flex-grow sm:min-w-[250px]">
+            <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Buscar por placa ou equipamento..." 
+              value={buscaPlaca}
+              onChange={(e) => setBuscaPlaca(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all"
+            />
+          </div>
+          
+          <div className="relative min-w-[150px]">
+            <Filter size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+            <select 
+              value={filtroMes} 
+              onChange={(e) => setFiltroMes(e.target.value)}
+              className="w-full bg-[#0f172a] border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all appearance-none cursor-pointer"
+            >
+              <option value="">Todos os Meses</option>
+              {mesesDisponiveis.map(mes => (
+                <option key={mes} value={mes}>{nomeMeses[mes] || mes}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -212,6 +290,7 @@ const ControleRos = () => {
         </div>
       ) : (
         <div className="animate-fade-in relative z-10">
+          
           {/* =========================================
               ABA 1: DASHBOARD GERAL
              ========================================= */}
@@ -339,13 +418,19 @@ const ControleRos = () => {
              ========================================= */}
           {activeTab === 'kanban' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[70vh]">
+              {/* Coluna 1: Aguardando Solicitação */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-red-500/10 p-3 rounded-xl border border-red-500/20">
                   <h3 className="font-bold text-red-400 uppercase text-xs tracking-widest">Aguardando Solicitação</h3>
                   <span className="bg-red-500/20 text-red-400 px-2 py-1 rounded text-xs font-black">{kAguardandoSolicitacao.length}</span>
                 </div>
                 {kAguardandoSolicitacao.map(item => (
-                  <div key={item.id} className="bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-red-500/30 transition-colors cursor-pointer">
+                  <div 
+                    key={item.id} 
+                    onClick={() => abrirModalEdicao(item)}
+                    className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-red-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative"
+                  >
+                    <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-red-400 transition-all" />
                     <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400 mb-2">Ocorrência: <span className="text-slate-200">{item.data_ocorrencia}</span></p>
                     <span className="inline-block px-2 py-1 bg-red-500/20 text-red-300 text-[10px] rounded uppercase font-bold">{item.tipo}</span>
@@ -353,13 +438,19 @@ const ControleRos = () => {
                 ))}
               </div>
 
+              {/* Coluna 2: Aguardando RO */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
                   <h3 className="font-bold text-amber-400 uppercase text-xs tracking-widest">Aguardando RO</h3>
                   <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs font-black">{kAguardandoRo.length}</span>
                 </div>
                 {kAguardandoRo.map(item => (
-                  <div key={item.id} className="bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-amber-500/30 transition-colors cursor-pointer">
+                  <div 
+                    key={item.id} 
+                    onClick={() => abrirModalEdicao(item)}
+                    className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-amber-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative"
+                  >
+                    <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-amber-400 transition-all" />
                     <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400">Solicitado: <span className="text-slate-200">{item.data_solicitacao}</span></p>
                     <p className="text-xs text-slate-400 mb-2">Chamado: <span className="text-amber-300 font-bold">{item.numero_chamado}</span></p>
@@ -368,13 +459,19 @@ const ControleRos = () => {
                 ))}
               </div>
 
+              {/* Coluna 3: Concluído */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-[#10b981]/10 p-3 rounded-xl border border-[#10b981]/20">
                   <h3 className="font-bold text-[#10b981] uppercase text-xs tracking-widest">RO Finalizada (OK)</h3>
                   <span className="bg-[#10b981]/20 text-[#10b981] px-2 py-1 rounded text-xs font-black">{kConcluido.length}</span>
                 </div>
                 {kConcluido.map(item => (
-                  <div key={item.id} className="bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-[#10b981]/30 transition-colors cursor-pointer opacity-70 hover:opacity-100">
+                  <div 
+                    key={item.id} 
+                    onClick={() => abrirModalEdicao(item)}
+                    className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-[#10b981]/50 hover:bg-white/[0.08] transition-all cursor-pointer opacity-80 hover:opacity-100 relative"
+                  >
+                    <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-[#10b981] transition-all" />
                     <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400 mb-2">Nº RO: <span className="text-[#10b981] font-bold">{item.numero_ro}</span></p>
                     <span className="inline-block px-2 py-1 bg-[#10b981]/20 text-[#10b981] text-[10px] rounded uppercase font-bold">CONCLUÍDO</span>
@@ -397,10 +494,11 @@ const ControleRos = () => {
                       <th className="p-4 font-bold">Data Ocorrência</th>
                       <th className="p-4 font-bold">Status</th>
                       <th className="p-4 font-bold">Nº RO</th>
+                      <th className="p-4 font-bold text-center">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ros.map((item, idx) => (
+                    {rosFiltradas.map((item, idx) => (
                       <tr key={idx} className="border-b border-white/5 hover:bg-white/[0.04] transition-colors group relative cursor-help">
                         <td className="p-4 font-black text-white relative">
                           <div className="flex items-center gap-2">
@@ -423,8 +521,22 @@ const ControleRos = () => {
                           )}
                         </td>
                         <td className="p-4 text-sm font-bold text-slate-300">{item.numero_ro || '-'}</td>
+                        <td className="p-4 text-center">
+                          <button 
+                            onClick={() => abrirModalEdicao(item)}
+                            className="text-slate-400 hover:text-[#10b981] bg-white/5 hover:bg-white/10 p-2 rounded-lg transition-colors"
+                            title="Editar Registro"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
+                    {rosFiltradas.length === 0 && (
+                      <tr>
+                        <td colSpan="5" className="p-8 text-center text-slate-500 font-bold">Nenhum registro encontrado para os filtros atuais.</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -434,7 +546,7 @@ const ControleRos = () => {
       )}
 
       {/* =========================================
-          MODAL DE NOVA RO
+          MODAL DE NOVA/EDITAR RO
          ========================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center items-center p-4 animate-fade-in">
@@ -444,9 +556,12 @@ const ControleRos = () => {
             <div className="flex justify-between items-center p-6 border-b border-white/10 bg-white/[0.02]">
               <div>
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
-                  <Plus className="text-[#10b981]" /> Nova Ocorrência
+                  {editingId ? <Edit className="text-amber-500" /> : <Plus className="text-[#10b981]" />}
+                  {editingId ? 'Editar Ocorrência' : 'Nova Ocorrência'}
                 </h2>
-                <p className="text-xs text-slate-400 uppercase tracking-widest mt-1">Preencha os dados da frota/equipamento</p>
+                <p className="text-xs text-slate-400 uppercase tracking-widest mt-1">
+                  {editingId ? `Atualizando registro do equipamento ${formData.equipamento}` : 'Preencha os dados da frota/equipamento'}
+                </p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-2 rounded-xl">
                 <X size={20} />
@@ -486,17 +601,17 @@ const ControleRos = () => {
               </div>
 
               <div className="border-t border-white/10 my-2 pt-4">
-                <h3 className="text-xs font-black text-[#0f4c81] uppercase tracking-widest mb-4">Acompanhamento e Status</h3>
+                <h3 className="text-xs font-black text-[#0f4c81] uppercase tracking-widest mb-4">Acompanhamento e Status do Kanban</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Data Solicitação</label>
-                    <input name="data_solicitacao" value={formData.data_solicitacao} onChange={handleInputChange} type="date" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all [color-scheme:dark]" />
+                    <input name="data_solicitacao" value={formData.data_solicitacao} onChange={handleInputChange} type="date" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all [color-scheme:dark]" />
                   </div>
                   
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Nº Chamado</label>
-                    <input name="numero_chamado" value={formData.numero_chamado} onChange={handleInputChange} type="text" placeholder="Ex: CH-9921" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all" />
+                    <input name="numero_chamado" value={formData.numero_chamado} onChange={handleInputChange} type="text" placeholder="Ex: CH-9921" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all" />
                   </div>
 
                   <div className="flex flex-col gap-1.5">
@@ -511,9 +626,9 @@ const ControleRos = () => {
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
                   Cancelar
                 </button>
-                <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 bg-[#10b981] hover:bg-[#0e9f6e] text-white px-8 py-3 rounded-xl font-bold transition-colors shadow-lg disabled:opacity-50">
+                <button type="submit" disabled={isSubmitting} className={`flex items-center gap-2 text-white px-8 py-3 rounded-xl font-bold transition-colors shadow-lg disabled:opacity-50 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#10b981] hover:bg-[#0e9f6e]'}`}>
                   {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                  {isSubmitting ? 'Salvando...' : 'Salvar Registro'}
+                  {isSubmitting ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Salvar Registro'}
                 </button>
               </div>
             </form>
