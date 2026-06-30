@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, BarChart2, TrendingUp, AlertCircle, FileWarning, 
-  Loader2, LayoutDashboard, Trello, TableProperties, Info 
+  Loader2, Layout, Columns, Table, Info 
 } from 'lucide-react';
 import { supabase } from '../services/supabase-config';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
@@ -129,7 +129,7 @@ const ControleRos = () => {
           <p className="text-slate-500 text-sm font-bold mt-1 uppercase tracking-wider">Gestão e Relatórios de Ocorrência</p>
         </div>
         
-        {/* Adicionado onClick para testar o botão */}
+        {/* Botão de Nova RO (Adicionado um alert provisório no onClick para testar) */}
         <button onClick={() => alert('Abrir modal/página de Nova RO')} className="flex items-center gap-2 bg-gradient-to-r from-[#10b981] to-[#0e9f6e] hover:brightness-110 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] z-30">
           <Plus size={20} />
           Registrar Nova RO
@@ -139,13 +139,13 @@ const ControleRos = () => {
       {/* CONTROLES DE ABAS */}
       <div className="relative z-20 flex gap-2 mb-8 bg-white/[0.02] p-1.5 rounded-2xl w-fit border border-white/5 backdrop-blur-sm">
         <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
-          <LayoutDashboard size={18} /> Visa Geral
+          <Layout size={18} /> Visão Geral
         </button>
         <button onClick={() => setActiveTab('kanban')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'kanban' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
-          <Trello size={18} /> Quadro Kanban
+          <Columns size={18} /> Quadro Kanban
         </button>
         <button onClick={() => setActiveTab('tabela')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'tabela' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
-          <TableProperties size={18} /> Tabela Interativa
+          <Table size={18} /> Tabela Interativa
         </button>
       </div>
 
