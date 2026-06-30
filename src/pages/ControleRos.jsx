@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, Plus, BarChart2, TrendingUp, AlertCircle, FileWarning, 
+  ArrowLeft, Plus, BarChart2, TrendingUp, TrendingDown, AlertCircle, FileWarning, 
   Loader2, Layout, Columns, Table, Info, X, Save, Search, Filter, Edit, Download
 } from 'lucide-react';
 import { supabase } from '../services/supabase-config';
-// IMPORT ATUALIZADO: Adicionado 'LabelList'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, LabelList } from 'recharts';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -15,21 +14,20 @@ const ControleRos = () => {
   const [loading, setLoading] = useState(true);
   const [ros, setRos] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-  
-  // ==============================
-  // ESTADOS DE FILTRO
-  // ==============================
   const [buscaPlaca, setBuscaPlaca] = useState('');
   const [filtroMes, setFiltroMes] = useState('');
-
-  // ==============================
-  // EXPORTAÇÃO PARA PDF (ATUALIZADO PARA 2 PÁGINAS)
-  // ==============================
   const [isExporting, setIsExporting] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState(null); 
+  const [formData, setFormData] = useState({
+    equipamento: '', data_ocorrencia: '', tipo: '', avaria: '',
+    custo_avaria: '', data_solicitacao: '', numero_chamado: '', numero_ro: ''
+  });
 
   const handleExportPDF = async () => {
     const elementDashboard = document.getElementById('dashboard-export-area');
-    const elementTable = document.getElementById('table-export-area'); // Nova área da tabela
+    const elementTable = document.getElementById('table-export-area');
     if (!elementDashboard || !elementTable) return;
 
     setIsExporting(true);
@@ -37,23 +35,13 @@ const ControleRos = () => {
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
 
-      // --- PÁGINA 1: Capturar Dashboard ---
-      const canvasDash = await html2canvas(elementDashboard, {
-        scale: 2, 
-        backgroundColor: '#030712', 
-        useCORS: true, 
-      });
+      const canvasDash = await html2canvas(elementDashboard, { scale: 2, backgroundColor: '#030712', useCORS: true });
       const imgDataDash = canvasDash.toDataURL('image/png');
       const dashHeight = (canvasDash.height * pdfWidth) / canvasDash.width;
       pdf.addImage(imgDataDash, 'PNG', 0, 0, pdfWidth, dashHeight);
 
-      // --- PÁGINA 2: Capturar Tabela Oculta ---
       pdf.addPage();
-      const canvasTable = await html2canvas(elementTable, {
-        scale: 2, 
-        backgroundColor: '#030712', 
-        useCORS: true, 
-      });
+      const canvasTable = await html2canvas(elementTable, { scale: 2, backgroundColor: '#030712', useCORS: true });
       const imgDataTable = canvasTable.toDataURL('image/png');
       const tableHeight = (canvasTable.height * pdfWidth) / canvasTable.width;
       pdf.addImage(imgDataTable, 'PNG', 0, 0, pdfWidth, tableHeight);
@@ -67,48 +55,15 @@ const ControleRos = () => {
     }
   };
 
-  // ==============================
-  // ESTADOS DO MODAL (CRIAR/EDITAR)
-  // ==============================
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState(null); 
-  const [formData, setFormData] = useState({
-    equipamento: '',
-    data_ocorrencia: '',
-    tipo: '',
-    avaria: '',
-    custo_avaria: '',
-    data_solicitacao: '',
-    numero_chamado: '',
-    numero_ro: ''
-  });
-
-  // ==============================
-  // FETCH DE DADOS DO SUPABASE
-  // ==============================
   const fetchControleRos = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('controle_ros')
-      .select('*')
-      .order('data_ocorrencia', { ascending: false });
-      
-    if (!error && data) {
-      setRos(data);
-    } else {
-      console.error("Erro ao buscar ROs:", error);
-    }
+    const { data, error } = await supabase.from('controle_ros').select('*').order('data_ocorrencia', { ascending: false });
+    if (!error && data) setRos(data);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchControleRos();
-  }, []);
+  useEffect(() => { fetchControleRos(); }, []);
 
-  // ==============================
-  // HANDLERS DO FORMULÁRIO E MODAL
-  // ==============================
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -116,24 +71,16 @@ const ControleRos = () => {
 
   const abrirModalNovaRo = () => {
     setEditingId(null);
-    setFormData({
-      equipamento: '', data_ocorrencia: '', tipo: '', avaria: '', 
-      custo_avaria: '', data_solicitacao: '', numero_chamado: '', numero_ro: ''
-    });
+    setFormData({ equipamento: '', data_ocorrencia: '', tipo: '', avaria: '', custo_avaria: '', data_solicitacao: '', numero_chamado: '', numero_ro: '' });
     setIsModalOpen(true);
   };
 
   const abrirModalEdicao = (item) => {
     setEditingId(item.id);
     setFormData({
-      equipamento: item.equipamento || '',
-      data_ocorrencia: item.data_ocorrencia || '',
-      tipo: item.tipo || '',
-      avaria: item.avaria || '',
-      custo_avaria: item.custo_avaria || '',
-      data_solicitacao: item.data_solicitacao || '',
-      numero_chamado: item.numero_chamado || '',
-      numero_ro: item.numero_ro || ''
+      equipamento: item.equipamento || '', data_ocorrencia: item.data_ocorrencia || '', tipo: item.tipo || '',
+      avaria: item.avaria || '', custo_avaria: item.custo_avaria || '', data_solicitacao: item.data_solicitacao || '',
+      numero_chamado: item.numero_chamado || '', numero_ro: item.numero_ro || ''
     });
     setIsModalOpen(true);
   };
@@ -141,84 +88,80 @@ const ControleRos = () => {
   const handleSubmitRO = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
     try {
-      const mesOcorrencia = formData.data_ocorrencia 
-        ? formData.data_ocorrencia.substring(5, 7) 
-        : null;
-        
+      const mesOcorrencia = formData.data_ocorrencia ? formData.data_ocorrencia.substring(5, 7) : null;
       const payload = {
-        equipamento: formData.equipamento.toUpperCase(),
-        data_ocorrencia: formData.data_ocorrencia || null,
-        tipo: formData.tipo,
-        avaria: formData.avaria,
-        custo_avaria: formData.custo_avaria ? parseFloat(formData.custo_avaria) : null,
-        data_solicitacao: formData.data_solicitacao || null,
-        numero_chamado: formData.numero_chamado || null,
-        numero_ro: formData.numero_ro || null,
-        mes: mesOcorrencia
+        equipamento: formData.equipamento.toUpperCase(), data_ocorrencia: formData.data_ocorrencia || null, tipo: formData.tipo,
+        avaria: formData.avaria, custo_avaria: formData.custo_avaria ? parseFloat(formData.custo_avaria) : null,
+        data_solicitacao: formData.data_solicitacao || null, numero_chamado: formData.numero_chamado || null,
+        numero_ro: formData.numero_ro || null, mes: mesOcorrencia
       };
       
       if (editingId) {
-        // ATUALIZAR RO EXISTENTE
-        const { error } = await supabase
-          .from('controle_ros')
-          .update(payload)
-          .eq('id', editingId);
+        const { error } = await supabase.from('controle_ros').update(payload).eq('id', editingId);
         if (error) throw error;
       } else {
-        // INSERIR NOVA RO
-        const { error } = await supabase
-          .from('controle_ros')
-          .insert([payload]);
+        const { error } = await supabase.from('controle_ros').insert([payload]);
         if (error) throw error;
       }
-
       setIsModalOpen(false);
-      fetchControleRos(); // Recarrega os dados
-
+      fetchControleRos();
     } catch (error) {
       console.error("Erro ao salvar RO:", error);
-      alert("Erro ao salvar os dados. Verifique o console.");
+      alert("Erro ao salvar os dados.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ==============================
-  // APLICAÇÃO DOS FILTROS GLOBAIS
-  // ==============================
   const rosFiltradas = ros.filter(r => {
     const matchPlaca = buscaPlaca === '' || (r.equipamento && r.equipamento.toLowerCase().includes(buscaPlaca.toLowerCase()));
     const matchMes = filtroMes === '' || (r.data_ocorrencia && r.data_ocorrencia.substring(5, 7) === filtroMes);
     return matchPlaca && matchMes;
   });
   
-  // Lista de meses disponíveis nos dados para o Dropdown de Filtro
   const mesesDisponiveis = [...new Set(ros.map(r => r.data_ocorrencia ? r.data_ocorrencia.substring(5, 7) : null).filter(Boolean))].sort();
   const nomeMeses = { '01':'Janeiro', '02':'Fevereiro', '03':'Março', '04':'Abril', '05':'Maio', '06':'Junho', '07':'Julho', '08':'Agosto', '09':'Setembro', '10':'Outubro', '11':'Novembro', '12':'Dezembro' };
   
-  // ==============================
-  // PROCESSAMENTO DOS KPIs E GRÁFICOS
-  // ==============================
   const totalRos = rosFiltradas.length;
   const custoTotal = rosFiltradas.reduce((acc, curr) => acc + (Number(curr.custo_avaria) || 0), 0);
   const custoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(custoTotal);
   const rosAbertas = rosFiltradas.filter(r => !r.numero_ro).length;
+
+  const anosOcorrencia = rosFiltradas.reduce((acc, curr) => {
+    if(curr.data_ocorrencia) {
+      const ano = curr.data_ocorrencia.substring(0,4);
+      acc[ano] = (acc[ano] || 0) + 1;
+    }
+    return acc;
+  }, {});
+  
+  const anosOrd = Object.keys(anosOcorrencia).sort();
+  const anoAtualStr = anosOrd[anosOrd.length - 1];
+  const anoAnteriorStr = anosOrd[anosOrd.length - 2];
+  const qtdAnoAtual = anosOcorrencia[anoAtualStr] || 0;
+  const qtdAnoAnterior = anosOcorrencia[anoAnteriorStr] || 0;
+  
+  let variacao = 0;
+  let textoVariacao = "N/A";
+  let isAumento = false;
+  let isQueda = false;
+
+  if (qtdAnoAnterior > 0) {
+    variacao = ((qtdAnoAtual - qtdAnoAnterior) / qtdAnoAnterior) * 100;
+    isAumento = variacao > 0;
+    isQueda = variacao < 0;
+    textoVariacao = `${isAumento ? '+' : ''}${variacao.toFixed(1)}%`;
+  }
   
   const dadosGraficoMensal = Object.values(rosFiltradas.reduce((acc, curr) => {
     if (curr.data_ocorrencia && curr.data_ocorrencia.length >= 7) {
       const ano = curr.data_ocorrencia.substring(0, 4);
       const mesStr = curr.data_ocorrencia.substring(5, 7);
       const chave = `${ano}-${mesStr}`; 
-      
       if (!acc[chave]) {
         const mesAbrev = nomeMeses[mesStr] ? nomeMeses[mesStr].substring(0, 3).toUpperCase() : `MÊS ${mesStr}`;
-        acc[chave] = { 
-          name: `${mesAbrev}/${ano}`, 
-          Ocorrencias: 0,
-          chaveOrdenacao: chave
-        };
+        acc[chave] = { name: `${mesAbrev}/${ano}`, Ocorrencias: 0, chaveOrdenacao: chave };
       }
       acc[chave].Ocorrencias += 1;
     }
@@ -234,13 +177,11 @@ const ControleRos = () => {
       if (!r.data_ocorrencia) return;
       const ano = r.data_ocorrencia.substring(0, 4);
       const mesIdx = parseInt(r.data_ocorrencia.substring(5, 7)) - 1;
-      
       if (mesIdx >= 0 && mesIdx <= 11) {
         const linha = dadosAnuais.find(d => d.name === meses[mesIdx]);
         linha[ano] = (linha[ano] || 0) + 1;
       }
     });
-    
     return { dados: dadosAnuais, anos: anosPresentes.sort() };
   };
   const { dados: comparativoAnual, anos: anosDisponiveis } = processarComparativoAnual();
@@ -252,8 +193,7 @@ const ControleRos = () => {
   
   const rankingEquipamentos = Object.entries(contagemEquipamentos)
     .map(([equipamento, quantidade]) => ({ equipamento, quantidade }))
-    .sort((a, b) => b.quantidade - a.quantidade)
-    .slice(0, 5);
+    .sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
     
   const contagemTipos = rosFiltradas.reduce((acc, curr) => {
     if (curr.tipo) acc[curr.tipo] = (acc[curr.tipo] || 0) + 1;
@@ -262,12 +202,8 @@ const ControleRos = () => {
   
   const rankingTipos = Object.entries(contagemTipos)
     .map(([tipo, quantidade]) => ({ tipo, quantidade }))
-    .sort((a, b) => b.quantidade - a.quantidade)
-    .slice(0, 5);
+    .sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
     
-  // ==============================
-  // PROCESSAMENTO DO KANBAN
-  // ==============================
   const kAguardandoSolicitacao = rosFiltradas.filter(r => r.data_ocorrencia && !r.numero_ro && (!r.data_solicitacao || !r.numero_chamado));
   const kAguardandoRo = rosFiltradas.filter(r => !r.numero_ro && r.data_solicitacao && r.numero_chamado);
   const kConcluido = rosFiltradas.filter(r => r.numero_ro);
@@ -277,7 +213,6 @@ const ControleRos = () => {
       <div className="absolute top-[-10%] left-[-5%] w-[600px] h-[600px] bg-[#0f4c81]/10 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] bg-[#10b981]/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-      {/* HEADER */}
       <header className="relative z-20 flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-white/10 pb-6">
         <div>
           <button onClick={() => navigate('/transporte-hub')} className="flex items-center gap-2 text-slate-400 hover:text-[#10b981] transition-colors text-xs font-black tracking-widest mb-3">
@@ -291,26 +226,17 @@ const ControleRos = () => {
         </div>
         
         <div className="flex items-center gap-3 z-30">
-          <button 
-            onClick={handleExportPDF} 
-            disabled={isExporting || activeTab !== 'dashboard'}
-            className="flex items-center gap-2 bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 px-4 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            title={activeTab !== 'dashboard' ? "Acesse a aba 'Visão Geral' para exportar" : "Exportar Dashboard em PDF"}
-          >
+          <button onClick={handleExportPDF} disabled={isExporting || activeTab !== 'dashboard'} className="flex items-center gap-2 bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 px-4 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
             {isExporting ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
             <span className="hidden sm:inline">{isExporting ? 'Gerando...' : 'Exportar PDF'}</span>
           </button>
-
           <button onClick={abrirModalNovaRo} className="flex items-center gap-2 bg-gradient-to-r from-[#10b981] to-[#0e9f6e] hover:brightness-110 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)]">
-            <Plus size={20} />
-            Registrar Nova RO
+            <Plus size={20} /> Registrar Nova RO
           </button>
         </div>
       </header>
 
-      {/* BARRA DE FERRAMENTAS: ABAS E FILTROS */}
       <div className="relative z-20 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-8">
-        
         <div className="flex gap-2 bg-white/[0.02] p-1.5 rounded-2xl w-fit border border-white/5 backdrop-blur-sm">
           <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-[#10b981]/20 text-[#10b981]' : 'text-slate-400 hover:text-white'}`}>
             <Layout size={18} /> Visão Geral
@@ -326,22 +252,11 @@ const ControleRos = () => {
         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
           <div className="relative flex-grow sm:min-w-[250px]">
             <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar por placa ou equipamento..." 
-              value={buscaPlaca}
-              onChange={(e) => setBuscaPlaca(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all"
-            />
+            <input type="text" placeholder="Buscar por placa ou equipamento..." value={buscaPlaca} onChange={(e) => setBuscaPlaca(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all" />
           </div>
-          
           <div className="relative min-w-[150px]">
             <Filter size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <select 
-              value={filtroMes} 
-              onChange={(e) => setFiltroMes(e.target.value)}
-              className="w-full bg-[#0f172a] border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all appearance-none cursor-pointer"
-            >
+            <select value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)} className="w-full bg-[#0f172a] border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all appearance-none cursor-pointer">
               <option value="">Todos os Meses</option>
               {mesesDisponiveis.map(mes => (
                 <option key={mes} value={mes}>{nomeMeses[mes] || mes}</option>
@@ -359,13 +274,10 @@ const ControleRos = () => {
       ) : (
         <div className="animate-fade-in relative z-10">
           
-          {/* =========================================
-              ABA 1: DASHBOARD GERAL
-             ========================================= */}
           {activeTab === 'dashboard' && (
             <div id="dashboard-export-area" className="p-2 -m-2">
-              {/* GRID DE KPIS */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-[#0f4c81]/20 rounded-bl-full blur-2xl group-hover:bg-[#0f4c81]/40 transition-colors"></div>
                   <div className="flex justify-between items-center mb-2 relative z-10">
@@ -376,25 +288,41 @@ const ControleRos = () => {
                 </div>
                 
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/10 rounded-bl-full blur-2xl group-hover:bg-red-500/20 transition-colors"></div>
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-bl-full blur-2xl group-hover:bg-amber-500/20 transition-colors"></div>
                   <div className="flex justify-between items-center mb-2 relative z-10">
-                     <h3 className="text-slate-400 text-xs font-black uppercase tracking-widest">Custo Total (Avarias)</h3>
-                     <TrendingUp size={20} className="text-red-500" />
+                     <h3 className="text-slate-400 text-xs font-black uppercase tracking-widest">Custo de Avarias</h3>
+                     <AlertCircle size={20} className="text-amber-500" />
                   </div>
                   <p className="text-3xl md:text-4xl font-black text-white relative z-10">{custoFormatado}</p>
                 </div>
 
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-bl-full blur-2xl group-hover:bg-amber-500/20 transition-colors"></div>
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-[#10b981]/10 rounded-bl-full blur-2xl group-hover:bg-[#10b981]/20 transition-colors"></div>
                   <div className="flex justify-between items-center mb-2 relative z-10">
-                     <h3 className="text-slate-400 text-xs font-black uppercase tracking-widest">ROs Pendentes (Sem N.º)</h3>
-                     <AlertCircle size={20} className="text-amber-500" />
+                     <h3 className="text-slate-400 text-xs font-black uppercase tracking-widest">Pendentes (Sem N.º)</h3>
+                     <Layout size={20} className="text-[#10b981]" />
                   </div>
                   <p className="text-4xl md:text-5xl font-black relative z-10">{rosAbertas}</p>
                 </div>
+
+                <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg relative overflow-hidden group">
+                  <div className={`absolute top-0 right-0 w-24 h-24 ${isAumento ? 'bg-red-500/10' : isQueda ? 'bg-[#10b981]/10' : 'bg-slate-500/10'} rounded-bl-full blur-2xl transition-colors`}></div>
+                  <div className="flex justify-between items-center mb-2 relative z-10">
+                     <h3 className="text-slate-400 text-xs font-black uppercase tracking-widest">Variação Anual</h3>
+                     {isAumento ? <TrendingUp size={20} className="text-red-500" /> : <TrendingDown size={20} className={isQueda ? "text-[#10b981]" : "text-slate-500"} />}
+                  </div>
+                  <div className="flex items-end gap-3 relative z-10">
+                    <p className={`text-3xl md:text-4xl font-black ${isAumento ? 'text-red-400' : isQueda ? 'text-[#10b981]' : 'text-slate-300'}`}>
+                      {textoVariacao}
+                    </p>
+                    <p className="text-xs text-slate-500 font-bold uppercase mb-1">
+                      {anoAnteriorStr ? `${anoAnteriorStr} ➔ ${anoAtualStr}` : 'Sem histórico'}
+                    </p>
+                  </div>
+                </div>
+
               </div>
 
-              {/* GRÁFICOS */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col min-h-[350px]">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-6 flex items-center gap-2">
@@ -402,7 +330,6 @@ const ControleRos = () => {
                    </h3>
                    <div className="flex-grow w-full h-full">
                      <ResponsiveContainer width="100%" height="100%">
-                       {/* Aumento do margin-top para 25 para os Labels caberem */}
                        <LineChart data={comparativoAnual} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
                          <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                          <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
@@ -410,7 +337,6 @@ const ControleRos = () => {
                          <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#cbd5e1' }}/>
                          {anosDisponiveis.map((ano, i) => (
                            <Line key={ano} type="monotone" dataKey={ano} stroke={i === 0 ? '#10b981' : '#0f4c81'} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }}>
-                             {/* NOVO: Rótulos de Dados no Gráfico de Linha */}
                              <LabelList dataKey={ano} position="top" fill={i === 0 ? '#10b981' : '#64748b'} fontSize={11} fontWeight="bold" />
                            </Line>
                          ))}
@@ -426,13 +352,11 @@ const ControleRos = () => {
                    <div className="flex-grow w-full h-full overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 transparent' }}>
                      <div style={{ minWidth: `${Math.max(dadosGraficoMensal.length * 60, 400)}px`, height: '100%' }}>
                        <ResponsiveContainer width="100%" height="100%">
-                         {/* Aumento do margin-top para 25 para os Labels caberem */}
                          <BarChart data={dadosGraficoMensal} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
                            <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                            <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                            <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
                            <Bar dataKey="Ocorrencias" radius={[6, 6, 0, 0]}>
-                             {/* NOVO: Rótulos de Dados no Gráfico de Barras */}
                              <LabelList dataKey="Ocorrencias" position="top" fill="#cbd5e1" fontSize={11} fontWeight="bold" />
                              {dadosGraficoMensal.map((entry, index) => (
                                <Cell key={`cell-${index}`} fill={index === dadosGraficoMensal.length - 1 ? '#10b981' : '#0f4c81'} />
@@ -445,7 +369,6 @@ const ControleRos = () => {
                 </div>
               </div>
 
-              {/* RANKINGS */}
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col">
                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
@@ -490,25 +413,15 @@ const ControleRos = () => {
             </div>
           )}
 
-          {/* ABA 2 E ABA 3 OCULTADAS NESTE BLOCO (MANTIDAS IGUAIS) */}
-          {/* ... */}
-          {/* =========================================
-              ABA 2: KANBAN DE ACOMPANHAMENTO
-             ========================================= */}
           {activeTab === 'kanban' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[70vh]">
-              {/* Coluna 1: Aguardando Solicitação */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-red-500/10 p-3 rounded-xl border border-red-500/20">
                   <h3 className="font-bold text-red-400 uppercase text-xs tracking-widest">Aguardando Solicitação</h3>
                   <span className="bg-red-500/20 text-red-400 px-2 py-1 rounded text-xs font-black">{kAguardandoSolicitacao.length}</span>
                 </div>
                 {kAguardandoSolicitacao.map(item => (
-                  <div 
-                    key={item.id} 
-                     onClick={() => abrirModalEdicao(item)}
-                    className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-red-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative"
-                  >
+                  <div key={item.id} onClick={() => abrirModalEdicao(item)} className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-red-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative">
                     <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-red-400 transition-all" />
                      <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400 mb-2">Ocorrência: <span className="text-slate-200">{item.data_ocorrencia}</span></p>
@@ -517,18 +430,13 @@ const ControleRos = () => {
                  ))}
               </div>
 
-              {/* Coluna 2: Aguardando RO */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
                    <h3 className="font-bold text-amber-400 uppercase text-xs tracking-widest">Aguardando RO</h3>
                   <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs font-black">{kAguardandoRo.length}</span>
                 </div>
                 {kAguardandoRo.map(item => (
-                  <div 
-                     key={item.id} 
-                    onClick={() => abrirModalEdicao(item)}
-                    className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-amber-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative"
-                  >
+                  <div key={item.id} onClick={() => abrirModalEdicao(item)} className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-amber-500/50 hover:bg-white/[0.08] transition-all cursor-pointer relative">
                      <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-amber-400 transition-all" />
                     <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400">Solicitado: <span className="text-slate-200">{item.data_solicitacao}</span></p>
@@ -538,18 +446,13 @@ const ControleRos = () => {
                 ))}
               </div>
 
-              {/* Coluna 3: Concluído */}
               <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-4 flex flex-col gap-3 overflow-y-auto">
                 <div className="flex items-center justify-between bg-[#10b981]/10 p-3 rounded-xl border border-[#10b981]/20">
                   <h3 className="font-bold text-[#10b981] uppercase text-xs tracking-widest">RO Finalizada (OK)</h3>
                   <span className="bg-[#10b981]/20 text-[#10b981] px-2 py-1 rounded text-xs font-black">{kConcluido.length}</span>
                 </div>
                  {kConcluido.map(item => (
-                  <div 
-                    key={item.id} 
-                    onClick={() => abrirModalEdicao(item)}
-                    className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-[#10b981]/50 hover:bg-white/[0.08] transition-all cursor-pointer opacity-80 hover:opacity-100 relative"
-                  >
+                  <div key={item.id} onClick={() => abrirModalEdicao(item)} className="group bg-white/[0.04] p-4 rounded-2xl border border-white/5 hover:border-[#10b981]/50 hover:bg-white/[0.08] transition-all cursor-pointer opacity-80 hover:opacity-100 relative">
                     <Edit size={16} className="absolute top-4 right-4 text-slate-500 opacity-0 group-hover:opacity-100 group-hover:text-[#10b981] transition-all" />
                     <p className="font-black text-lg text-white mb-1">{item.equipamento}</p>
                     <p className="text-xs text-slate-400 mb-2">Nº RO: <span className="text-[#10b981] font-bold">{item.numero_ro}</span></p>
@@ -560,16 +463,13 @@ const ControleRos = () => {
             </div>
            )}
 
-          {/* =========================================
-              ABA 3: TABELA INTERATIVA
-             ========================================= */}
           {activeTab === 'tabela' && (
             <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg overflow-hidden">
               <div className="overflow-x-auto">
                  <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-widest">
-                      <th className="p-4 font-bold">Equipamento (Passe o Mouse)</th>
+                      <th className="p-4 font-bold">Equipamento</th>
                        <th className="p-4 font-bold">Data Ocorrência</th>
                       <th className="p-4 font-bold">Status</th>
                       <th className="p-4 font-bold">Nº RO</th>
@@ -601,19 +501,13 @@ const ControleRos = () => {
                         </td>
                         <td className="p-4 text-sm font-bold text-slate-300">{item.numero_ro || '-'}</td>
                         <td className="p-4 text-center">
-                          <button 
-                            onClick={() => abrirModalEdicao(item)}
-                             className="text-slate-400 hover:text-[#10b981] bg-white/5 hover:bg-white/10 p-2 rounded-lg transition-colors"
-                            title="Editar Registro"
-                          >
-                            <Edit size={16} />
-                          </button>
+                          <button onClick={() => abrirModalEdicao(item)} className="text-slate-400 hover:text-[#10b981] bg-white/5 hover:bg-white/10 p-2 rounded-lg transition-colors"><Edit size={16} /></button>
                         </td>
                       </tr>
                     ))}
                      {rosFiltradas.length === 0 && (
                       <tr>
-                        <td colSpan="5" className="p-8 text-center text-slate-500 font-bold">Nenhum registro encontrado para os filtros atuais.</td>
+                        <td colSpan="5" className="p-8 text-center text-slate-500 font-bold">Nenhum registro encontrado.</td>
                       </tr>
                      )}
                   </tbody>
@@ -624,14 +518,9 @@ const ControleRos = () => {
         </div>
         )}
 
-      {/* =========================================
-          MODAL DE NOVA/EDITAR RO
-         ========================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center items-center p-4 animate-fade-in">
           <div className="bg-[#0f172a] border border-white/10 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
-             {/* Header Modal */}
             <div className="flex justify-between items-center p-6 border-b border-white/10 bg-white/[0.02]">
               <div>
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
@@ -642,19 +531,15 @@ const ControleRos = () => {
                   {editingId ? `Atualizando registro do equipamento ${formData.equipamento}` : 'Preencha os dados da frota/equipamento'}
                 </p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-2 rounded-xl">
-                <X size={20} />
-              </button>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-2 rounded-xl"><X size={20} /></button>
              </div>
 
-            {/* Body Modal (Formulário) */}
             <form onSubmit={handleSubmitRO} className="p-6 overflow-y-auto flex flex-col gap-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Equipamento / Placa *</label>
                   <input required name="equipamento" value={formData.equipamento} onChange={handleInputChange} type="text" placeholder="Ex: CAV-102" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all uppercase" />
                 </div>
-                
                  <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-400 uppercase ml-1">Data da Ocorrência *</label>
                   <input required name="data_ocorrencia" value={formData.data_ocorrencia} onChange={handleInputChange} type="date" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all [color-scheme:dark]" />
@@ -664,9 +549,8 @@ const ControleRos = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-400 uppercase ml-1">Tipo de Ocorrência *</label>
-                  <input required name="tipo" value={formData.tipo} onChange={handleInputChange} type="text" placeholder="Ex: Mecânica, Elétrica, Colisão" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all" />
+                  <input required name="tipo" value={formData.tipo} onChange={handleInputChange} type="text" placeholder="Ex: Mecânica, Elétrica" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all" />
                 </div>
-
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-400 uppercase ml-1">Custo da Avaria (R$)</label>
                   <input name="custo_avaria" value={formData.custo_avaria} onChange={handleInputChange} type="number" step="0.01" placeholder="0.00" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all" />
@@ -675,23 +559,20 @@ const ControleRos = () => {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-slate-400 uppercase ml-1">Descrição da Avaria</label>
-                <textarea name="avaria" value={formData.avaria} onChange={handleInputChange} rows="3" placeholder="Descreva o problema encontrado no equipamento..." className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all resize-none"></textarea>
+                <textarea name="avaria" value={formData.avaria} onChange={handleInputChange} rows="3" placeholder="Descreva o problema..." className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981]/50 focus:ring-1 focus:ring-[#10b981]/50 transition-all resize-none"></textarea>
               </div>
 
               <div className="border-t border-white/10 my-2 pt-4">
                 <h3 className="text-xs font-black text-[#0f4c81] uppercase tracking-widest mb-4">Acompanhamento e Status do Kanban</h3>
-                
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Data Solicitação</label>
                     <input name="data_solicitacao" value={formData.data_solicitacao} onChange={handleInputChange} type="date" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all [color-scheme:dark]" />
                    </div>
-                  
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Nº Chamado</label>
                     <input name="numero_chamado" value={formData.numero_chamado} onChange={handleInputChange} type="text" placeholder="Ex: CH-9921" className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all" />
                   </div>
-
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase ml-1">Nº da RO</label>
                     <input name="numero_ro" value={formData.numero_ro} onChange={handleInputChange} type="text" placeholder="Para finalizar" className="bg-[#10b981]/10 border border-[#10b981]/30 rounded-xl p-3 text-white focus:outline-none focus:border-[#10b981] transition-all" />
@@ -700,10 +581,8 @@ const ControleRos = () => {
               </div>
 
               <div className="mt-4 flex justify-end gap-3">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
-                  Cancelar
-                </button>
-                <button type="submit" disabled={isSubmitting} className={`flex items-center gap-2 text-white px-8 py-3 rounded-xl font-bold transition-colors shadow-lg disabled:opacity-50 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#10b981] hover:bg-[#0e9f6e]'}`}>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors">Cancelar</button>
+                <button type="submit" disabled={isSubmitting} className={`flex items-center gap-2 text-white px-8 py-3 rounded-xl font-bold transition-colors shadow-lg disabled:opacity-50 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#10b981 hover:bg-[#0e9f6e]'}`}>
                   {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                   {isSubmitting ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Salvar Registro'}
                 </button>
@@ -713,21 +592,14 @@ const ControleRos = () => {
         </div>
       )}
 
-      {/* =========================================
-          ÁREA OCULTA: TABELA PARA EXPORTAÇÃO PDF
-          (Renderizada fora da tela para não quebrar o layout)
-         ========================================= */}
       <div className="absolute top-[-9999px] left-[-9999px]">
         <div id="table-export-area" className="bg-[#030712] text-white p-8 w-[1000px]">
           <div className="border-b border-white/20 pb-4 mb-6">
             <h2 className="text-2xl font-black text-[#10b981] flex items-center gap-2">
               <Table size={24} /> Resumo Analítico
             </h2>
-            <p className="text-sm text-slate-400 mt-1 uppercase tracking-widest font-bold">
-              Detalhamento das Ocorrências Apresentadas no Dashboard
-            </p>
+            <p className="text-sm text-slate-400 mt-1 uppercase tracking-widest font-bold">Detalhamento das Ocorrências Apresentadas no Dashboard</p>
           </div>
-          
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[#10b981]/30 text-slate-400 text-xs uppercase tracking-widest">
@@ -750,9 +622,7 @@ const ControleRos = () => {
                   <td className="p-3 text-slate-400 italic text-xs break-words">{item.avaria || 'Nenhuma descrição fornecida.'}</td>
                 </tr>
               )) : (
-                <tr>
-                  <td colSpan="6" className="p-6 text-center text-slate-500 font-bold">Nenhum dado para exibir neste filtro.</td>
-                </tr>
+                <tr><td colSpan="6" className="p-6 text-center text-slate-500 font-bold">Nenhum dado para exibir neste filtro.</td></tr>
               )}
             </tbody>
           </table>
@@ -760,13 +630,8 @@ const ControleRos = () => {
       </div>
 
       <style>{`
-        @keyframes fade-in { 
-           from { opacity: 0; transform: translateY(10px); } 
-          to { opacity: 1; transform: translateY(0); } 
-        }
-        .animate-fade-in { 
-          animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
     </div>
   );
