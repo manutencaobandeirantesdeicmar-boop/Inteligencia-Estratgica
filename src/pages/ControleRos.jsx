@@ -31,17 +31,30 @@ const ControleRos = () => {
     try {
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
+      // Página 1: Dashboard
       const canvasDash = await html2canvas(elementDash, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-      const imgDataDash = canvasDash.toDataURL('image/png');
       const dashHeight = (canvasDash.height * pdfWidth) / canvasDash.width;
-      pdf.addImage(imgDataDash, 'PNG', 0, 0, pdfWidth, dashHeight);
+      pdf.addImage(canvasDash.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, dashHeight);
 
+      // Páginas Seguintes: Tabela Matriz com quebra automática
       pdf.addPage();
       const canvasTable = await html2canvas(elementTable, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-      const imgDataTable = canvasTable.toDataURL('image/png');
-      const tableHeight = (canvasTable.height * pdfWidth) / canvasTable.width;
-      pdf.addImage(imgDataTable, 'PNG', 0, 0, pdfWidth, tableHeight);
+      const tableImgHeight = (canvasTable.height * pdfWidth) / canvasTable.width;
+      
+      let heightLeft = tableImgHeight;
+      let position = 0;
+
+      pdf.addImage(canvasTable.toDataURL('image/png'), 'PNG', 0, position, pdfWidth, tableImgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position -= pageHeight;
+        pdf.addPage();
+        pdf.addImage(canvasTable.toDataURL('image/png'), 'PNG', 0, position, pdfWidth, tableImgHeight);
+        heightLeft -= pageHeight;
+      }
 
       pdf.save('Relatorio_ROs.pdf');
     } catch (error) {
@@ -133,7 +146,6 @@ const ControleRos = () => {
   const anosOrd = Object.keys(anosOcorrencia).sort();
   const anoAtualStr = anosOrd[anosOrd.length - 1];
   const anoAnteriorStr = anosOrd[anosOrd.length - 2];
-  
   const mesAtual = new Date().getMonth() + 1; 
   const nomeMesYTD = nomeMeses[mesAtual.toString().padStart(2, '0')]?.substring(0,3).toUpperCase() || '';
   
@@ -199,8 +211,8 @@ const ControleRos = () => {
     if (curr.equipamento) acc[curr.equipamento] = (acc[curr.equipamento] || 0) + 1;
     return acc;
   }, {});
-  
   const rankingEquipamentos = Object.entries(contagemEquipamentos).map(([equipamento, quantidade]) => ({ equipamento, quantidade })).sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
+  
   const contagemTipos = rosFiltradas.reduce((acc, curr) => {
     if (curr.tipo) acc[curr.tipo] = (acc[curr.tipo] || 0) + 1;
     return acc;
@@ -236,8 +248,7 @@ const ControleRos = () => {
             <ArrowLeft size={16} /> VOLTAR AO HUB
           </button>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight flex items-center gap-3">
-            <FileWarning className="text-[#10b981]" size={36} />
-            Dashboard de <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0f4c81] to-[#10b981]">ROs</span>
+            <FileWarning className="text-[#10b981]" size={36} /> Dashboard de <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0f4c81] to-[#10b981]">ROs</span>
           </h1>
         </div>
         <div className="flex items-center gap-3 z-30">
@@ -342,6 +353,49 @@ const ControleRos = () => {
                    </div>
                 </div>
               </div>
+
+              {/* RETORNO DOS RANKINGS NO DASHBOARD UI */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col">
+                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
+                     <AlertCircle className="text-amber-500"/> Top 5 Equipamentos
+                   </h3>
+                   <div className="flex flex-col gap-3">
+                     {rankingEquipamentos.map((item, index) => (
+                       <div key={item.equipamento} className="flex items-center justify-between bg-white/[0.03] border border-white/5 p-4 rounded-2xl hover:bg-white/[0.06] transition-colors">
+                           <div className="flex items-center gap-4">
+                           <span className={`text-lg font-black w-6 text-center ${index === 0 ? 'text-red-500' : index === 1 ? 'text-amber-500' : 'text-slate-500'}`}>{index + 1}º</span>
+                           <div>
+                             <p className="font-black text-white">{item.equipamento}</p>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">Frota</p>
+                           </div>
+                         </div>
+                         <div className="bg-white/10 px-3 py-1 rounded-lg text-sm font-black">{item.quantidade} <span className="text-[10px] font-normal text-slate-400">ROs</span></div>
+                        </div>
+                     ))}
+                   </div>
+                </div>
+
+                <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md shadow-lg flex flex-col">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 mb-4 flex items-center gap-2">
+                     <FileWarning className="text-red-500"/> Ranking por Tipo
+                   </h3>
+                   <div className="flex flex-col gap-3">
+                      {rankingTipos.map((item, index) => (
+                       <div key={item.tipo} className="flex items-center justify-between bg-white/[0.03] border border-white/5 p-4 rounded-2xl hover:bg-white/[0.06] transition-colors">
+                         <div className="flex items-center gap-4">
+                            <span className={`text-lg font-black w-6 text-center ${index === 0 ? 'text-red-500' : index === 1 ? 'text-amber-500' : 'text-slate-500'}`}>{index + 1}º</span>
+                           <div>
+                             <p className="font-black text-white capitalize">{item.tipo || 'Não Definido'}</p>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">Categoria</p>
+                           </div>
+                         </div>
+                          <div className="bg-white/10 px-3 py-1 rounded-lg text-sm font-black">{item.quantidade} <span className="text-[10px] font-normal text-slate-400">QTD</span></div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+              </div>
             </div>
           )}
 
@@ -371,14 +425,47 @@ const ControleRos = () => {
           {activeTab === 'tabela' && (
             <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 backdrop-blur-md overflow-hidden">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="border-b border-white/10 text-slate-400 text-xs uppercase"><th className="p-4 font-bold">Equipamento</th><th className="p-4 font-bold">Data</th><th className="p-4 font-bold">Ações</th></tr></thead>
+                <thead>
+                  <tr className="border-b border-white/10 text-slate-400 text-xs uppercase">
+                    <th className="p-4 font-bold">Equipamento (Passe o Mouse)</th>
+                    <th className="p-4 font-bold">Data</th>
+                    <th className="p-4 font-bold">Status</th>
+                    <th className="p-4 font-bold">Nº RO</th>
+                    <th className="p-4 font-bold text-center">Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {rosFiltradas.map((item, idx) => (
-                    <tr key={idx} className="border-b border-white/5 hover:bg-white/[0.04]">
-                      <td className="p-4 font-black text-white">{item.equipamento}</td><td className="p-4 text-sm text-slate-300">{item.data_ocorrencia || '-'}</td>
-                      <td className="p-4"><button onClick={() => abrirModalEdicao(item)} className="text-slate-400 hover:text-[#10b981]"><Edit size={16} /></button></td>
+                    <tr key={idx} className="border-b border-white/5 hover:bg-white/[0.04] transition-colors group relative cursor-help">
+                      <td className="p-4 font-black text-white relative">
+                        <div className="flex items-center gap-2">
+                          {item.equipamento}
+                          <Info size={14} className="text-slate-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <div className="absolute left-4 top-12 z-50 hidden group-hover:flex flex-col gap-1 w-64 bg-[#0f172a] border border-[#10b981]/30 p-4 rounded-xl shadow-2xl">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Detalhes da Avaria</p>
+                          <p className="text-sm"><span className="text-slate-500">Data:</span> <span className="text-white">{item.data_ocorrencia}</span></p>
+                          <p className="text-sm"><span className="text-slate-500">Tipo:</span> <span className="text-[#10b981] font-bold">{item.tipo || 'N/A'}</span></p>
+                          <p className="text-sm mt-1 text-slate-300 italic">"{item.avaria || 'Sem descrição informada.'}"</p>
+                        </div>
+                      </td>
+                      <td className="p-4 text-sm text-slate-300">{item.data_ocorrencia || '-'}</td>
+                      <td className="p-4">
+                        {item.numero_ro ? (
+                          <span className="bg-[#10b981]/20 text-[#10b981] px-2 py-1 rounded text-xs font-black uppercase">Finalizado</span>
+                        ) : (
+                          <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs font-black uppercase">Pendente</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-sm font-bold text-slate-300">{item.numero_ro || '-'}</td>
+                      <td className="p-4 text-center">
+                        <button onClick={() => abrirModalEdicao(item)} className="text-slate-400 hover:text-[#10b981] bg-white/5 hover:bg-white/10 p-2 rounded-lg transition-colors"><Edit size={16} /></button>
+                      </td>
                     </tr>
                   ))}
+                  {rosFiltradas.length === 0 && (
+                    <tr><td colSpan="5" className="p-8 text-center text-slate-500 font-bold">Nenhum registro encontrado.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -417,10 +504,10 @@ const ControleRos = () => {
         </div>
       )}
 
+      {/* ÁREA DE EXPORTAÇÃO PDF OCULTA */}
       <div className="absolute top-[-9999px] left-[-9999px]">
-        <div id="export-page-1" className="bg-white text-slate-800 p-8 w-[1000px] h-[1414px]">
+        <div id="export-page-1" className="bg-white text-slate-800 p-8 w-[1000px]">
           <h2 className="text-3xl font-black text-slate-800 mb-6 border-b border-slate-200 pb-4">Relatório de Gestão - ROs</h2>
-          
           <div className="grid grid-cols-4 gap-4 mb-10">
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
               <h3 className="text-slate-500 text-[10px] font-black uppercase mb-1">Total Registrado</h3><p className="text-2xl font-black">{totalRos}</p>
@@ -436,7 +523,6 @@ const ControleRos = () => {
               <p className={`text-2xl font-black ${isAumento ? 'text-red-500' : isQueda ? 'text-[#10b981]' : 'text-slate-800'}`}>{textoVariacao}</p>
             </div>
           </div>
-
           <div className="mb-10 h-[350px]">
             <h3 className="text-lg font-black text-slate-800 mb-4">Comparativo Anual</h3>
             <LineChart width={936} height={300} data={comparativoAnual} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
@@ -450,7 +536,6 @@ const ControleRos = () => {
               ))}
             </LineChart>
           </div>
-
           <div className="h-[350px]">
             <h3 className="text-lg font-black text-slate-800 mb-4">Histórico Mensal Geral</h3>
             <BarChart width={936} height={300} data={dadosGraficoMensal} margin={{ top: 25, right: 10, left: -20, bottom: 0 }}>
@@ -464,7 +549,8 @@ const ControleRos = () => {
           </div>
         </div>
 
-        <div id="export-page-2" className="bg-white text-slate-800 p-8 w-[1000px] h-[1414px]">
+        {/* NOTA: Removido o fixed height 'h-[1414px]' daqui para a tabela crescer livremente */}
+        <div id="export-page-2" className="bg-white text-slate-800 p-8 w-[1000px]">
           <h2 className="text-2xl font-black text-slate-800 mb-6 border-b border-slate-200 pb-4">Matriz Analítica - Equipamentos por Ano</h2>
           <table className="w-full text-left border-collapse border border-slate-300">
             <thead>
