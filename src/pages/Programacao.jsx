@@ -3,7 +3,7 @@ import { supabase } from '../services/supabase-config';
 import { useNavigate } from 'react-router-dom';
 import emailjs from '@emailjs/browser';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 import { 
   Calendar, Wrench, ChevronLeft, PlusCircle, Search, 
@@ -82,15 +82,14 @@ const Programacao = () => {
   // ==============================
   const gerarRelatorioPDF = () => {
     try {
-      // Cria um novo documento A4 em modo paisagem (landscape) para caber mais dados
       const doc = new jsPDF('landscape');
 
       // 1. Configurações de Título
       doc.setFontSize(22);
-      doc.setTextColor(15, 76, 129); // Azul do seu tema (#0f4c81)
+      doc.setTextColor(15, 76, 129); 
       doc.text('Plano de Manutenção Semanal', 14, 20);
 
-      // 2. Informações de Filtro (Subtítulo corrigido)
+      // 2. Informações de Filtro 
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text(`Filiais Filtradas: ${filiaisExportacao.join(', ')}`, 14, 28);
@@ -99,7 +98,7 @@ const Programacao = () => {
       const dataFim = diasDaSemana[6]?.toLocaleDateString('pt-BR');
       doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, 33);
 
-      // 3. Filtrar dados respeitando as caixinhas marcadas no Modal (igual ao disparo de E-mail)
+      // 3. Filtrar dados respeitando as caixinhas marcadas no Modal
       const dadosParaExportacao = dados.filter(i => {
         if(!i.data_parada) return false;
         
@@ -125,21 +124,21 @@ const Programacao = () => {
           item.placa,
           item.filial,
           item.os || '-',
-          `${item.tipo}\nFalha: ${item.falha}`, // Quebra de linha dentro da célula
+          `${item.tipo}\nFalha: ${item.falha}`, 
           `De: ${inicio}\nAté: ${fim}`,
           item.responsavel || '-',
           item.observacoes || '-'
         ];
       });
 
-      // 5. Gerar a Tabela no PDF
-      doc.autoTable({
+      // 5. Gerar a Tabela no PDF (AQUI ESTÁ A CORREÇÃO PRINCIPAL)
+      autoTable(doc, {
         startY: 40,
         head: [colunas],
         body: linhas,
         theme: 'grid',
         headStyles: { 
-          fillColor: [15, 76, 129], // Fundo azul do cabeçalho
+          fillColor: [15, 76, 129],
           textColor: 255, 
           fontStyle: 'bold',
           halign: 'center'
@@ -149,16 +148,15 @@ const Programacao = () => {
           valign: 'middle' 
         },
         columnStyles: {
-          0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, // Máquina
-          1: { halign: 'center', cellWidth: 20 }, // Filial
-          2: { halign: 'center', cellWidth: 25 }, // OS
-          3: { cellWidth: 45 }, // Tipo/Falha
-          4: { cellWidth: 35 }, // Período
-          5: { cellWidth: 40 }, // Responsável
-          // Observações ocupa o restante do espaço
+          0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, 
+          1: { halign: 'center', cellWidth: 20 }, 
+          2: { halign: 'center', cellWidth: 25 }, 
+          3: { cellWidth: 45 }, 
+          4: { cellWidth: 35 }, 
+          5: { cellWidth: 40 }, 
         },
         alternateRowStyles: {
-          fillColor: [245, 247, 250] // Linhas zebradas bem suaves
+          fillColor: [245, 247, 250] 
         },
         emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
       });
@@ -167,7 +165,6 @@ const Programacao = () => {
       doc.save(`Plano_Manutencao_${dataInicio.replace(/\//g, '-')}.pdf`);
 
     } catch (error) {
-      // Caso ocorra algum outro erro no futuro, um alerta aparecerá na tela em vez de falhar em silêncio
       alert("Erro ao gerar o PDF: " + error.message);
       console.error("Erro detalhado do PDF:", error);
     }
