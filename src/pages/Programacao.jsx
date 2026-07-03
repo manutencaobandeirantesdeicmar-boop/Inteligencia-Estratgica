@@ -179,9 +179,6 @@ const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
     if (!linhaRef.id) {
       // Se não tem ID, é uma linha nova não salva; apenas removemos da tela
       const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
-      setLinhasPlanilha(novasLinhas);
-      return;
-    }
     
     const { error } = await supabase.from('programacao').delete().eq('id', linhaRef.id);
     if (!error) {
@@ -252,12 +249,12 @@ const toggleFiltroFilial = (f) => {
     if (aAtrasado && !bAtrasado) return -1;
     if (!aAtrasado && bAtrasado) return 1;
 
-    // 2️⃣ Caminhões em trânsito no final
+ // 2️⃣ Caminhões em trânsito no final
     const aTransito = a.situacao === 'EM ANDAMENTO';
     const bTransito = b.situacao === 'EM ANDAMENTO';
     if (aTransito && !bTransito) return 1;
     if (!aTransito && bTransito) return -1;
-
+    
     // 3️⃣ Ordenação selecionada pelo usuário no select
     if (ordenacao === 'prioridade') {
       const pWeight = { 'CRÍTICA': 4, 'ALTA': 3, 'MÉDIA': 2, 'BAIXA': 1 };
@@ -284,11 +281,18 @@ const toggleFiltroFilial = (f) => {
   
   const formatDtInput = (dt) => {
     if (!dt) return '';
-    const date = new Date(dt);
-    // Subtrai o offset do fuso horário para o input exibir a hora local correta
-    const offset = date.getTimezoneOffset() * 60000;
-    const localDate = new Date(date.getTime() - offset);
-    return localDate.toISOString().slice(0, 16);
+    try {
+      const date = new Date(dt);
+      // Se a data for inválida (ex: string malformada do banco), retorna vazio em vez de explodir a tela
+      if (isNaN(date.getTime())) return ''; 
+      
+      // Subtrai o offset do fuso horário para o input exibir a hora local correta
+      const offset = date.getTimezoneOffset() * 60000;
+      const localDate = new Date(date.getTime() - offset);
+      return localDate.toISOString().slice(0, 16);
+    } catch (e) {
+      return ''; // Proteção extra contra qualquer erro de formatação
+    }
   };
 
   return (
