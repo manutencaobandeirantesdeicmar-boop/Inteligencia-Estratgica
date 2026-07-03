@@ -175,7 +175,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
     }
   };
 
-  cconst handleExcluir = async (linhaRef) => {
+  const handleExcluir = async (linhaRef) => {
   if (!window.confirm("⚠️ Deseja excluir este item permanentemente?")) return;
   
   if (!linhaRef.id) {
