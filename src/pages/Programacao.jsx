@@ -32,8 +32,25 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
   
   // Filtros Exclusivos do Editor Base de Dados
   const [buscaEditor, setBuscaEditor] = useState('');
-  const [filialEditor, setFilialEditor] = useState('TODAS');
+  const [filiaisEditor, setFiliaisEditor] = useState(['TODAS']);
   const [ordenacaoEditor, setOrdenacaoEditor] = useState('recente');
+
+  const toggleFilialEditor = (f) => {
+  if (f === 'TODAS') {
+    setFiliaisEditor(['TODAS']);
+    return;
+  }
+  
+  setFiliaisEditor(prev => {
+    const filtrado = prev.filter(item => item !== 'TODAS');
+    if (filtrado.includes(f)) {
+      const novo = filtrado.filter(item => item !== f);
+      return novo.length === 0 ? ['TODAS'] : novo;
+    } else {
+      return [...filtrado, f];
+    }
+  });
+};
 
   const [dataBaseGantt, setDataBaseGantt] = useState(() => {
     const d = new Date();
@@ -200,7 +217,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
   // Filtragem interna do Editor Base
  const linhasEditorFiltradas = linhasPlanilha.filter(item => {
     const batePlaca = (item.placa || '').toLowerCase().includes(buscaEditor.toLowerCase());
-    const bateFilial = filialEditor === 'TODAS' || item.filial === filialEditor;
+    const bateFilial = filiaisEditor.includes('TODAS') || filiaisEditor.includes(item.filial);
     return batePlaca && bateFilial;
   }).sort((a, b) => {
     // 1️⃣ REGRA NOVA: Se "a" é nova (sem id) e "b" já existe, "a" sobe pro topo
@@ -567,10 +584,21 @@ const toggleFiltroFilial = (f) => {
                   <Search size={12} className="text-slate-400 mr-1.5 shrink-0" />
                   <input type="text" placeholder="Filtrar Placa/Tag..." value={buscaEditor} onChange={e => setBuscaEditor(e.target.value)} className="bg-transparent text-xs text-slate-800 outline-none placeholder-slate-400 w-full font-bold uppercase" />
                 </div>
-                <select value={filialEditor} onChange={e => setFilialEditor(e.target.value)} className="bg-white text-slate-700 text-xs font-bold p-1.5 rounded-lg outline-none cursor-pointer">
-                  <option value="TODAS">Filial: Todas</option>
-                  {FILIAIS.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
+                <div className="flex bg-white rounded-lg p-0.5 overflow-hidden border border-slate-200 shadow-sm">
+                  {['TODAS', ...FILIAIS].map(f => (
+                    <button
+                      key={f}
+                      onClick={() => toggleFilialEditor(f)}
+                      className={`px-2 py-1 text-[10px] font-bold transition-all rounded ${
+                        filiaisEditor.includes(f) 
+                          ? 'bg-[#0f4c81] text-white shadow-sm' 
+                          : 'text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
                 <select value={ordenacaoEditor} onChange={e => setOrdenacaoEditor(e.target.value)} className="bg-white text-slate-700 text-xs font-bold p-1.5 rounded-lg outline-none cursor-pointer">
                   <option value="recente">Ord: Mais Recentes</option>
                   <option value="placa">Ord: Placa A-Z</option>
