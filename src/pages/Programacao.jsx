@@ -112,7 +112,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
     return prazo < hoje;
   };
 
- // ==============================
+// ==============================
   // GERADOR DE RELATÓRIO PDF REAL
   // ==============================
   const gerarRelatorioPDF = () => {
@@ -191,17 +191,21 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
       });
 
       // ==========================================
-      // 4. Montar os dados da Tabela Detalhada (COM HORA INCLUÍDA)
+      // 4. Montar os dados da Tabela Detalhada (NOVA PÁGINA)
       // ==========================================
-      const proximoY = doc.lastAutoTable.finalY + 12;
-      doc.setFontSize(13);
+      
+      // Força a criação de uma nova página
+      doc.addPage();
+      
+      // Reinicia o Y para o topo da nova folha
+      const proximoY = 20; 
+      doc.setFontSize(16); // Título um pouco maior na folha de detalhes
       doc.setTextColor(15, 76, 129);
       doc.text('Detalhamento das Operações', 14, proximoY);
 
       const colunas = ["Máquina", "Filial", "OS", "Tipo / Falha", "Período", "Responsável", "Observações"];
       
       const linhas = itensDaSemana.map(item => {
-        // Função para formatar Data e Hora juntas (ex: 03/07/26 14:30)
         const formatarDataHora = (dataStr) => {
           if (!dataStr) return '-';
           return new Date(dataStr).toLocaleString('pt-BR', { 
@@ -220,27 +224,27 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
           item.filial,
           item.os || '-',
           `${item.tipo}\nFalha: ${item.falha}`, 
-          `Início: ${inicio}\nFim: ${fim}`,
+          `Início: ${inicio}\nFim:    ${fim}`, // Alinhamento ajustado para leitura
           item.responsavel || '-',
           item.observacoes || '-'
         ];
       });
 
-      // 5. Gerar a Tabela Detalhada
+      // 5. Gerar a Tabela Detalhada (FONTE MAIOR)
       autoTable(doc, {
-        startY: proximoY + 4,
+        startY: proximoY + 6,
         head: [colunas],
         body: linhas,
         theme: 'grid',
-        headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center' },
-        styles: { fontSize: 8, valign: 'middle', cellPadding: 1.5, minCellHeight: 7 }, 
+        headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 11 }, // Fonte do cabeçalho maior
+        styles: { fontSize: 10, valign: 'middle', cellPadding: 3, minCellHeight: 10 }, // Fonte corpo 10 e mais espaço (cellPadding 3)
         columnStyles: {
-          0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, 
-          1: { halign: 'center', cellWidth: 15 }, 
-          2: { halign: 'center', cellWidth: 22 }, 
-          3: { cellWidth: 43 }, 
-          4: { cellWidth: 42 }, // <- Aumentada para caber a data e hora perfeitamente
-          5: { cellWidth: 35 }, 
+          0: { fontStyle: 'bold', halign: 'center', cellWidth: 28 }, 
+          1: { halign: 'center', cellWidth: 18 }, 
+          2: { halign: 'center', cellWidth: 25 }, 
+          3: { cellWidth: 50 }, // Aumentado para acomodar fonte maior
+          4: { cellWidth: 46 }, // Aumentado
+          5: { cellWidth: 40 }, // Aumentado
         },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
