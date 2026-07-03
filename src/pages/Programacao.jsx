@@ -112,7 +112,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
     return prazo < hoje;
   };
 
-  // ==============================
+ // ==============================
   // GERADOR DE RELATÓRIO PDF REAL
   // ==============================
   const gerarRelatorioPDF = () => {
@@ -124,91 +124,77 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
       doc.setTextColor(15, 76, 129); 
       doc.text('Plano de Manutenção Semanal', 14, 20);
 
-      // 2. Informações de Filtro 
+      // 2. Informações de Filtro (AGORA PUXA OS FILTROS REAIS DA TELA)
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
-      doc.text(`Filiais Filtradas: ${filiaisExportacao.join(', ')}`, 14, 28);
+      doc.text(`Filiais Filtradas: ${filiaisSelecionadas.join(', ')}`, 14, 28);
       
       const dataInicio = diasDaSemana[0]?.toLocaleDateString('pt-BR');
       const dataFim = diasDaSemana[6]?.toLocaleDateString('pt-BR');
       doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, 33);
 
-      // 3. Filtrar dados respeitando as caixinhas marcadas no Modal
-      const dadosParaExportacao = dados.filter(i => {
-        if(!i.data_parada) return false;
-        
-        const atendeFilial = filiaisExportacao.includes('TODAS') || filiaisExportacao.includes(i.filial);
-        if (!atendeFilial) return false;
-        
-        const dp = new Date(i.data_parada).setHours(0,0,0,0);
-        const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
-        const semInicio = diasDaSemana[0].setHours(0,0,0,0);
-        const semFim = diasDaSemana[6].setHours(23,59,59,999);
-        
-        return dp <= semFim && df >= semInicio;
-      });
-
       // ==========================================
-      // NOVA PARTE VISUAL: GRADE SEMANAL DE MÁQUINAS
+      // NOVA PARTE VISUAL: ESTILO GANTT TIMELINE
       // ==========================================
-      const colunasGrade = diasDaSemana.map((dia, idx) => {
-        const dataFormatada = `${dia.getDate()}/${(dia.getMonth() + 1).toString().padStart(2, '0')}`;
-        return `${DIAS_SEMANA[idx]}\n${dataFormatada}`;
-      });
+      // Monta o cabeçalho: 1ª coluna = Equipamento, demais = Dias da Semana
+      const colunasGantt = [
+        'Equipamento', 
+        ...diasDaSemana.map((dia, idx) => `${DIAS_SEMANA[idx]}\n${dia.getDate()}/${(dia.getMonth() + 1).toString().padStart(2, '0')}`)
+      ];
 
-      const linhaGrade = diasDaSemana.map(dia => {
-        const itensNesteDia = dadosParaExportacao.filter(item => {
-          const dp = new Date(item.data_parada).setHours(0,0,0,0);
-          const df = item.data_final ? new Date(item.data_final).setHours(0,0,0,0) : (item.prazo ? new Date(item.prazo).setHours(0,0,0,0) : dp);
+      // Usamos 'itensDaSemana' diretamente! Respeita todos os filtros da tela.
+      const linhasGantt = itensDaSemana.map(item => {
+        const dp = new Date(item.data_parada).setHours(0,0,0,0);
+        const df = item.data_final ? new Date(item.data_final).setHours(0,0,0,0) : (item.prazo ? new Date(item.prazo).setHours(0,0,0,0) : dp);
+
+        // Primeira coluna da linha
+        const linha = [`${item.placa}\nOS: ${item.os || '-'}`];
+
+        // Verifica dia a dia se a máquina está parada
+        diasDaSemana.forEach(dia => {
           const diaAtual = dia.getTime();
-          return dp <= diaAtual && df >= diaAtual;
+          if (dp <= diaAtual && df >= diaAtual) {
+            linha.push('OCUPADO'); // Marcador secreto para colorir a célula
+          } else {
+            linha.push('');
+          }
         });
-
-        if (itensNesteDia.length === 0) return "Livre";
-        return itensNesteDia.map(item => item.placa).join('\n');
+        return linha;
       });
 
       autoTable(doc, {
         startY: 38,
-        head: [colunasGrade],
-        body: [linhaGrade],
+        head: [colunasGantt],
+        body: linhasGantt,
         theme: 'grid',
-        headStyles: { 
-          fillColor: [15, 76, 129],
-          textColor: 255, 
-          fontStyle: 'bold',
-          halign: 'center',
-          fontSize: 9
-        },
-        styles: { 
-          fontSize: 9,
-          halign: 'center',
-          valign: 'middle',
-          cellPadding: 5
+        headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 9 },
+        styles: { fontSize: 8, halign: 'center', valign: 'middle', cellPadding: 3, lineColor: [220, 226, 230], lineWidth: 0.1 },
+        columnStyles: {
+          0: { halign: 'left', fontStyle: 'bold', cellWidth: 40, fillColor: [250, 250, 250] } // Destaca a coluna do Equipamento
         },
         didParseCell: function (data) {
-          if (data.section === 'body') {
-            if (data.cell.text[0] === 'Livre') {
-              data.cell.styles.textColor = [150, 150, 150];
-              data.cell.styles.fontStyle = 'italic';
-            } else {
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.textColor = [15, 76, 129];
-              data.cell.styles.fillColor = [240, 249, 255]; 
+          // Lógica que cria a "Barra do Gantt" pintando a célula inteira
+          if (data.section === 'body' && data.column.index > 0) {
+            if (data.cell.raw === 'OCUPADO') {
+              data.cell.text = ''; // Esconde a palavra
+              data.cell.styles.fillColor = [16, 185, 129]; // Pinta a célula de verde esmeralda contínuo
             }
           }
-        }
+        },
+        emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
       });
 
+      // ==========================================
+      // 4. Montar os dados da Tabela Detalhada
+      // ==========================================
       const proximoY = doc.lastAutoTable.finalY + 12;
       doc.setFontSize(13);
       doc.setTextColor(15, 76, 129);
       doc.text('Detalhamento das Operações', 14, proximoY);
 
-      // 4. Montar os dados da Tabela Detalhada
       const colunas = ["Máquina", "Filial", "OS", "Tipo / Falha", "Período", "Responsável", "Observações"];
       
-      const linhas = dadosParaExportacao.map(item => {
+      const linhas = itensDaSemana.map(item => {
         const inicio = new Date(item.data_parada).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
         const fim = item.data_final ? new Date(item.data_final).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : (item.prazo ? new Date(item.prazo).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : inicio);
         
@@ -229,16 +215,8 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
         head: [colunas],
         body: linhas,
         theme: 'grid',
-        headStyles: { 
-          fillColor: [15, 76, 129],
-          textColor: 255, 
-          fontStyle: 'bold',
-          halign: 'center'
-        },
-        styles: { 
-          fontSize: 8,
-          valign: 'middle' 
-        },
+        headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center' },
+        styles: { fontSize: 8, valign: 'middle' },
         columnStyles: {
           0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, 
           1: { halign: 'center', cellWidth: 20 }, 
@@ -247,9 +225,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
           4: { cellWidth: 35 }, 
           5: { cellWidth: 40 }, 
         },
-        alternateRowStyles: {
-          fillColor: [245, 247, 250] 
-        },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
         emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
       });
 
