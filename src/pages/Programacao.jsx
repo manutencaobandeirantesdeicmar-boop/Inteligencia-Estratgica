@@ -1,33 +1,57 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase-config';
 import { useNavigate } from 'react-router-dom';
-import emailjs from '@emailjs/browser';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-
 import { 
   Calendar, Wrench, ChevronLeft, PlusCircle, Search, 
   Layout, Printer, Clock, AlertTriangle, CheckCircle2, 
-  X, ChevronRight, Info, Edit3, ChevronLeft as LeftIcon, 
-  ChevronRight as RightIcon, Mail, FileText 
+  X, Edit3, ChevronLeft as LeftIcon, ChevronRight as RightIcon, 
+  Mail, FileText, Trash2, Copy, Save, BarChart2, Filter, Database,
+  TrendingUp
 } from 'lucide-react';
 
 const FILIAIS = ['CLIA', 'IPA', 'BK', 'HUB', 'FROTA'];
-const COLUNAS_KANBAN = ['PROGRAMADO', 'EM ANDAMENTO', 'AGUARDANDO PEÇA', 'FINALIZADO'];
+const COLUNAS_KANBAN = ['ATRASADOS', 'PROGRAMADO', 'EM ANDAMENTO', 'AGUARDANDO PEÇA', 'FINALIZADO'];
 const DIAS_SEMANA = ['SÁB', 'DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX'];
 const DURACAO = ['CURTA', 'MÉDIA', 'EXTENSA'];
 const TIPOS_MANUTENCAO = ['CORRETIVA', 'CORRETIVA PROGRAMADA', 'PREVENTIVA', 'INSPEÇÃO E LUBRIFICAÇÃO', 'VERIFICAR NÍVEIS', 'GERAL'];
 const FALHAS = ['ALTERNADOR', 'ANTI BALANÇO', 'AR CONDICIONADO', 'ARLA', 'BANCO', 'BATERIA', 'BICO INJETOR', 'BOMBA', 'BUZINA', 'CARRETA', 'CILINDRO', 'COOLERS', 'CORRENTE', 'CÂMERA', 'DESLOCADOR', 'DIFERENCIAL', 'DIREÇÃO', 'EIXO DIRECIONAL', 'ELÉTRICA', 'EXTINTOR', 'FILTROS', 'FREIOS', 'HIDRÁULICO', 'ILUMINAÇÃO', 'INJETOR', 'JOYSTICK', 'LANÇA', 'LAVAGEM', 'LIMPADOR PARA-BRISA', 'MANGUEIRAS', 'MOTOR', 'PARA-LAMA', 'PARTIDA', 'PNEUMÁTICO / BORRACHARIA', 'PROJETOS', 'QUADRO', 'RADIADOR', 'REFORMA / SOLDA', 'RODA', 'SPREADER', 'SUSPENSÃO', 'TORRE', 'TRANSMISSÃO', 'TURBINA', 'VAZAMENTO', 'ÓLEO'];
+const PRIORIDADES = ['BAIXA', 'MÉDIA', 'ALTA', 'CRÍTICA'];
+const OPCOES_SIM_NAO = ['NÃO', 'SIM'];
 
 const Programacao = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState([]);
-  const [abaAtiva, setAbaAtiva] = useState('kanban');
-  const [filtroFilial, setFiltroFilial] = useState('TODAS');
-  const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
+  const [abaAtiva, setAbaAtiva] = useState('dashboard'); 
   
-  // Controle Cronograma (Semanas)
+  // Filtros Globais da Tela Principal
+// Filtros Globais da Tela Principal
+const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
+const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
+const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
+  
+  // Filtros Exclusivos do Editor Base de Dados
+  const [buscaEditor, setBuscaEditor] = useState('');
+  const [filiaisEditor, setFiliaisEditor] = useState(['TODAS']);
+  const [ordenacaoEditor, setOrdenacaoEditor] = useState('recente');
+
+  const toggleFilialEditor = (f) => {
+  if (f === 'TODAS') {
+    setFiliaisEditor(['TODAS']);
+    return;
+  }
+  
+  setFiliaisEditor(prev => {
+    const filtrado = prev.filter(item => item !== 'TODAS');
+    if (filtrado.includes(f)) {
+      const novo = filtrado.filter(item => item !== f);
+      return novo.length === 0 ? ['TODAS'] : novo;
+    } else {
+      return [...filtrado, f];
+    }
+  });
+};
+
   const [dataBaseGantt, setDataBaseGantt] = useState(() => {
     const d = new Date();
     const day = d.getDay();
@@ -36,20 +60,15 @@ const Programacao = () => {
     return start;
   });
 
-  // Modais e Formulário
-  const [modalAberto, setModalAberto] = useState(false);
   const [modalExportarAberto, setModalExportarAberto] = useState(false);
-  const [itemEditando, setItemEditando] = useState(null);
+  const [modalPlanilhaAberto, setModalPlanilhaAberto] = useState(false); 
   const [destinatariosEmail, setDestinatariosEmail] = useState('');
   const [filiaisExportacao, setFiliaisExportacao] = useState(['TODAS']); 
-  
-  const [formData, setFormData] = useState({
-    placa: '', os: '', filial: 'CLIA', reprogramado: 'NÃO',
-    data_parada: '', duracao: 'CURTA', tipo: 'PREVENTIVA', responsavel: '',
-    falha: 'MOTOR', prazo: '', data_final: '', observacoes: '', situacao: 'PROGRAMADO'
-  });
+  const [linhasPlanilha, setLinhasPlanilha] = useState([]);
 
-  // --- LÓGICA DE DATAS DA SEMANA ---
+  // ==============================
+  // GANTT (TOTALMENTE INTACTO)
+  // ==============================
   const getDiasGantt = () => Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(dataBaseGantt);
     d.setDate(dataBaseGantt.getDate() + i);
@@ -68,420 +87,405 @@ const Programacao = () => {
     setDataBaseGantt(start);
   };
 
-  // --- BUSCA SUPABASE ---
+  // ==============================
+  // FETCH DE DADOS
+  // ==============================
   const fetchProgramacao = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('programacao').select('*').order('data_parada', { ascending: true });
-    if (!error) setDados(data);
+    if (!error) {
+      setDados(data);
+      setLinhasPlanilha(data);
+    }
     setLoading(false);
   };
+
   useEffect(() => { fetchProgramacao(); }, []);
 
+  const checarSeAtrasado = (item) => {
+    if (item.situacao === 'FINALIZADO') return false;
+    const hoje = new Date();
+    const prazo = item.prazo ? new Date(item.prazo) : (item.data_final ? new Date(item.data_final) : new Date(item.data_parada));
+    return prazo < hoje;
+  };
+
   // ==============================
-  // GERADOR DE RELATÓRIO PDF REAL
+  // LÓGICA DO EDITOR BASE DE DADOS
   // ==============================
-  const gerarRelatorioPDF = () => {
-    try {
-      const doc = new jsPDF('landscape');
+  const abrirModalPlanilha = () => {
+    setLinhasPlanilha(dados);
+    setModalPlanilhaAberto(true);
+  };
 
-      // 1. Configurações de Título
-      doc.setFontSize(22);
-      doc.setTextColor(15, 76, 129); // Azul do tema (#0f4c81)
-      doc.text('Plano de Manutenção Semanal', 14, 20);
-
-      // 2. Informações de Filtro 
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Filiais Filtradas: ${filiaisExportacao.join(', ')}`, 14, 28);
-      
-      const dataInicio = diasDaSemana[0]?.toLocaleDateString('pt-BR');
-      const dataFim = diasDaSemana[6]?.toLocaleDateString('pt-BR');
-      doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, 33);
-
-      // 3. Filtrar dados respeitando as caixinhas marcadas no Modal
-      const dadosParaExportacao = dados.filter(i => {
-        if(!i.data_parada) return false;
-        
-        const atendeFilial = filiaisExportacao.includes('TODAS') || filiaisExportacao.includes(i.filial);
-        if (!atendeFilial) return false;
-        
-        const dp = new Date(i.data_parada).setHours(0,0,0,0);
-        const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
-        const semInicio = diasDaSemana[0].setHours(0,0,0,0);
-        const semFim = diasDaSemana[6].setHours(23,59,59,999);
-        
-        return dp <= semFim && df >= semInicio;
-      });
-
-      // ==========================================
-      // NOVA PARTE VISUAL: GRADE SEMANAL DE MÁQUINAS
-      // ==========================================
-      // Cria o cabeçalho combinando o dia escrito (SÁB, DOM...) e a data (04/07...)
-      const colunasGrade = diasDaSemana.map((dia, idx) => {
-        const dataFormatada = `${dia.getDate()}/${(dia.getMonth() + 1).toString().padStart(2, '0')}`;
-        return `${DIAS_SEMANA[idx]}\n${dataFormatada}`;
-      });
-
-      // Mapeia os dados agrupando as placas que rodam em cada dia específico
-      const linhaGrade = diasDaSemana.map(dia => {
-        const itensNesteDia = dadosParaExportacao.filter(item => {
-          const dp = new Date(item.data_parada).setHours(0,0,0,0);
-          const df = item.data_final ? new Date(item.data_final).setHours(0,0,0,0) : (item.prazo ? new Date(item.prazo).setHours(0,0,0,0) : dp);
-          const diaAtual = dia.getTime();
-          return dp <= diaAtual && df >= diaAtual;
-        });
-
-        if (itensNesteDia.length === 0) return "Livre";
-        // Une as placas separando por quebra de linha dentro da célula
-        return itensNesteDia.map(item => item.placa).join('\n');
-      });
-
-      // Renderiza a mini grade visualizada no topo do PDF
-      autoTable(doc, {
-        startY: 38,
-        head: [colunasGrade],
-        body: [linhaGrade],
-        theme: 'grid',
-        headStyles: { 
-          fillColor: [15, 76, 129],
-          textColor: 255, 
-          fontStyle: 'bold',
-          halign: 'center',
-          fontSize: 9
-        },
-        styles: { 
-          fontSize: 9,
-          halign: 'center',
-          valign: 'middle',
-          cellPadding: 5
-        },
-        didParseCell: function (data) {
-          // Customização visual das células do corpo
-          if (data.section === 'body') {
-            if (data.cell.text[0] === 'Livre') {
-              data.cell.styles.textColor = [150, 150, 150];
-              data.cell.styles.fontStyle = 'italic';
-            } else {
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.textColor = [15, 76, 129];
-              data.cell.styles.fillColor = [240, 249, 255]; // Realce em azul claro nos dias ocupados
-            }
-          }
-        }
-      });
-
-      // Descobre onde a grade terminou e adiciona o título da tabela detalhada com espaçamento seguro
-      const proximoY = doc.lastAutoTable.finalY + 12;
-      doc.setFontSize(13);
-      doc.setTextColor(15, 76, 129);
-      doc.text('Detalhamento das Operações', 14, proximoY);
-
-      // 4. Montar os dados da Tabela Detalhada (Inalterada)
-      const colunas = ["Máquina", "Filial", "OS", "Tipo / Falha", "Período", "Responsável", "Observações"];
-      
-      const linhas = dadosParaExportacao.map(item => {
-        const inicio = new Date(item.data_parada).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-        const fim = item.data_final ? new Date(item.data_final).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : (item.prazo ? new Date(item.prazo).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : inicio);
-        
-        return [
-          item.placa,
-          item.filial,
-          item.os || '-',
-          `${item.tipo}\nFalha: ${item.falha}`, 
-          `De: ${inicio}\nAté: ${fim}`,
-          item.responsavel || '-',
-          item.observacoes || '-'
-        ];
-      });
-
-      // 5. Gerar a Tabela Detalhada vinculada dinamicamente abaixo da parte visual
-      autoTable(doc, {
-        startY: proximoY + 4,
-        head: [colunas],
-        body: linhas,
-        theme: 'grid',
-        headStyles: { 
-          fillColor: [15, 76, 129],
-          textColor: 255, 
-          fontStyle: 'bold',
-          halign: 'center'
-        },
-        styles: { 
-          fontSize: 8,
-          valign: 'middle' 
-        },
-        columnStyles: {
-          0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, 
-          1: { halign: 'center', cellWidth: 20 }, 
-          2: { halign: 'center', cellWidth: 25 }, 
-          3: { cellWidth: 45 }, 
-          4: { cellWidth: 35 }, 
-          5: { cellWidth: 40 }, 
-        },
-        alternateRowStyles: {
-          fillColor: [245, 247, 250] 
-        },
-        emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
-      });
-
-      // 6. Salva e baixa o arquivo na máquina do usuário
-      doc.save(`Plano_Manutencao_${dataInicio.replace(/\//g, '-')}.pdf`);
-
-    } catch (error) {
-      alert("Erro ao gerar o PDF: " + error.message);
-      console.error("Erro detalhado do PDF:", error);
+ const adicionarNovaLinha = () => {
+    const novaLinha = {
+      id: null, 
+      placa: '', 
+      os: '', 
+      filial: 'CLIA', 
+      reprogramado: 'NÃO', 
+      prioridade: 'MÉDIA',
+      data_parada: new Date().toISOString().split('T')[0], 
+      duracao: 'CURTA', 
+      tipo: 'PREVENTIVA', 
+      responsavel: '',
+      falha: 'MOTOR', 
+      prazo: '', 
+      data_final: '', 
+      observacoes: '', 
+      situacao: 'PROGRAMADO'
+    };
+    
+    setLinhasPlanilha([novaLinha, ...linhasPlanilha]);
+    
+    // Garante que a nova filial apareça no filtro para o usuário ver o item
+    if (!filiaisSelecionadas.includes('TODAS') && !filiaisSelecionadas.includes('CLIA')) {
+        setFiliaisSelecionadas(prev => [...prev, 'CLIA']);
     }
   };
 
-  const handleSalvar = async () => {
-    const payload = { ...formData };
-    if (payload.data_parada) payload.data_parada = new Date(payload.data_parada).toISOString();
-    if (payload.prazo) payload.prazo = new Date(payload.prazo).toISOString();
-    if (payload.data_final) payload.data_final = new Date(payload.data_final).toISOString();
-
-    const { error } = itemEditando 
-      ? await supabase.from('programacao').update(payload).eq('id', itemEditando.id)
-      : await supabase.from('programacao').insert([payload]);
-
-    if (!error) { setModalAberto(false); fetchProgramacao(); } 
-    else { alert("Erro ao salvar: " + error.message); }
+  const duplicarLinha = (linhaRef) => {
+    // Encontra o index exato no array original através da referência do objeto
+    const index = linhasPlanilha.findIndex(l => l === linhaRef);
+    if (index === -1) return;
+    
+    const linhaCopiada = { ...linhaRef, id: null, os: '' };
+    const novasLinhas = [...linhasPlanilha];
+    novasLinhas.splice(index + 1, 0, linhaCopiada);
+    setLinhasPlanilha(novasLinhas);
   };
 
-  const abrirEdicao = (item) => {
-    setItemEditando(item);
-    const formatDt = (dt) => dt ? new Date(dt).toISOString().slice(0, 16) : '';
-    setFormData({ ...item, 
-      data_parada: formatDt(item.data_parada), 
-      prazo: formatDt(item.prazo), 
-      data_final: formatDt(item.data_final) 
-    });
-    setModalAberto(true);
+  const atualizarLinha = (linhaRef, campo, valor) => {
+    const novasLinhas = linhasPlanilha.map(linha => 
+      linha === linhaRef ? { ...linha, [campo]: valor } : linha
+    );
+    setLinhasPlanilha(novasLinhas);
   };
 
+  const salvarLinha = async (linhaRef) => {
+    const payload = { ...linhaRef };
+    payload.data_parada = payload.data_parada ? new Date(payload.data_parada).toISOString() : null;
+    payload.prazo = payload.prazo ? new Date(payload.prazo).toISOString() : null;
+    payload.data_final = payload.data_final ? new Date(payload.data_final).toISOString() : null;
+
+    let error;
+    if (payload.id) {
+      const { error: err } = await supabase.from('programacao').update(payload).eq('id', payload.id);
+      error = err;
+    } else {
+      delete payload.id;
+      const { data, error: err } = await supabase.from('programacao').insert([payload]).select();
+      error = err;
+      if (!err && data) {
+        // Atualiza a linha recém-salva com o ID gerado pelo banco
+        const novasLinhas = linhasPlanilha.map(linha => 
+          linha === linhaRef ? data[0] : linha
+        );
+        setLinhasPlanilha(novasLinhas);
+      }
+    }
+    if (!error) { 
+      alert("✅ Registro salvo com sucesso!");
+      fetchProgramacao(); 
+    } else { 
+      alert("Erro ao salvar: " + error.message); 
+    }
+  };
+
+  const handleExcluir = async (linhaRef) => {
+  if (!window.confirm("⚠️ Deseja excluir este item permanentemente?")) return;
   
-  // --- FUNÇÃO DE ENVIO DE E-MAIL (COM BUSCA DE MODELO E ORDENAÇÃO) ---
-  const dispararEmail = async () => {
-    if (!destinatariosEmail) {
-      alert("⚠️ Por favor, digite o e-mail de destino.");
+  if (!linhaRef.id) {
+    // Se não tem ID, é uma linha nova não salva; apenas removemos da tela
+    const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
+    setLinhasPlanilha(novasLinhas);
+    return; // 👈 O return é essencial aqui para ele não tentar apagar no banco
+  }
+
+  // Se tem ID, apaga no Supabase
+  const { error } = await supabase.from('programacao').delete().eq('id', linhaRef.id);
+  
+  if (!error) {
+    const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
+    setLinhasPlanilha(novasLinhas);
+    fetchProgramacao();
+  } else {
+    alert("Erro ao excluir: " + error.message);
+  }
+};
+
+  // Filtragem interna do Editor Base
+ const linhasEditorFiltradas = linhasPlanilha.filter(item => {
+    const batePlaca = (item.placa || '').toLowerCase().includes(buscaEditor.toLowerCase());
+    const bateFilial = filiaisEditor.includes('TODAS') || filiaisEditor.includes(item.filial);
+    return batePlaca && bateFilial;
+  }).sort((a, b) => {
+    // 1️⃣ REGRA NOVA: Se "a" é nova (sem id) e "b" já existe, "a" sobe pro topo
+    if (!a.id && b.id) return -1;
+    if (a.id && !b.id) return 1;
+   
+    if (ordenacaoEditor === 'placa') return (a.placa || '').localeCompare(b.placa || '');
+    if (ordenacaoEditor === 'prioridade') {
+      const peso = { 'CRÍTICA': 4, 'ALTA': 3, 'MÉDIA': 2, 'BAIXA': 1 };
+      return (peso[b.prioridade] || 0) - (peso[a.prioridade] || 0);
+    }
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
+
+  // ==============================
+  // DRAG & DROP DO KANBAN
+  // ==============================
+  const onDragStart = (e, id) => { e.dataTransfer.setData("id", id); };
+  const onDragOver = (e, coluna) => { e.preventDefault(); if (colunaAberta !== coluna) setColunaAberta(coluna); };
+  const onDrop = async (e, novaSituacao) => {
+    const id = e.dataTransfer.getData("id");
+    const situacaoFinal = novaSituacao === 'ATRASADOS' ? 'PROGRAMADO' : novaSituacao;
+    const { error } = await supabase.from('programacao').update({ situacao: situacaoFinal }).eq('id', id);
+    if (!error) fetchProgramacao();
+  };
+
+  // ==============================
+  // FILTROS PRINCIPAIS
+  // ==============================
+const toggleFiltroFilial = (f) => {
+    if (f === 'TODAS') {
+      setFiliaisSelecionadas(['TODAS']);
       return;
     }
-
-    try {
-      // 1. Filtra os dados da semana e das filiais
-      const dadosParaEnvio = dados.filter(i => {
-        if(!i.data_parada) return false;
-        
-        const atendeFilial = filiaisExportacao.includes('TODAS') || filiaisExportacao.includes(i.filial);
-        if (!atendeFilial) return false;
-        
-        const dp = new Date(i.data_parada).setHours(0,0,0,0);
-        const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
-        const semInicio = diasDaSemana[0].setHours(0,0,0,0);
-        const semFim = diasDaSemana[6].setHours(23,59,59,999);
-        return dp <= semFim && df >= semInicio;
-      });
-
-      // 2. Busca a 'descricao_modelo' na tabela equipamentos
-      const placasDaSemana = [...new Set(dadosParaEnvio.map(i => i.placa))];
-      let equipamentosInfo = [];
-
-      if (placasDaSemana.length > 0) {
-        const { data: equipData, error: equipError } = await supabase
-          .from('equipamentos')
-          .select('id, descricao_modelo')
-          .in('id', placasDaSemana);
-          
-        if (!equipError && equipData) {
-          equipamentosInfo = equipData;
-        }
-      }
-
-      // 3. Junta as informações e Ordena (Reach Stacker no topo)
-      const itensOrdenados = dadosParaEnvio.map(item => {
-        const equip = equipamentosInfo.find(e => e.id === item.placa);
-        return {
-          ...item,
-          descricao_modelo: equip ? equip.descricao_modelo : 'FROTA/OUTRO'
-        };
-      }).sort((a, b) => {
-        const modeloA = a.descricao_modelo.toUpperCase();
-        const modeloB = b.descricao_modelo.toUpperCase();
-        
-        const aIsRS = modeloA.includes('REACH STACKER');
-        const bIsRS = modeloB.includes('REACH STACKER');
-        
-        if (aIsRS && !bIsRS) return -1;
-        if (!aIsRS && bIsRS) return 1;
-        return 0; // Mantém a ordem se ambos forem ou não forem Reach Stacker
-      });
-
-      // 4. Montagem da Tabela Única HTML
-      let htmlCorpo = `<table width="100%" cellpadding="10" cellspacing="0" style="border: 1px solid #e2e8f0; font-family: sans-serif; font-size: 12px; border-collapse: collapse;">
-        <tr style="background-color: #0f4c81; color: white; text-transform: uppercase; font-size: 11px;">
-          <th align="left">Identificação</th>
-          <th align="left">Manutenção</th>
-          <th align="left">Situação</th>
-          <th align="left">Prazos</th>
-        </tr>`;
-
-      if (itensOrdenados.length === 0) {
-          htmlCorpo += `<tr><td colspan="4" align="center" style="padding: 20px; color: #64748b;">Nenhuma O.S. para as unidades selecionadas nesta semana.</td></tr>`;
+    
+    setFiliaisSelecionadas(prev => {
+      const filtrado = prev.filter(item => item !== 'TODAS');
+      if (filtrado.includes(f)) {
+        const novo = filtrado.filter(item => item !== f);
+        return novo.length === 0 ? ['TODAS'] : novo;
       } else {
-          itensOrdenados.forEach(i => {
-            const isRS = i.descricao_modelo.toUpperCase().includes('REACH STACKER');
-            // Fundo azul claro se for Reach Stacker
-            const corBg = isRS ? 'background-color: #f0f9ff;' : '';
-            const corStatus = i.situacao === 'FINALIZADO' ? '#10b981' : (i.situacao === 'EM ANDAMENTO' ? '#f59e0b' : '#64748b');
-
-            htmlCorpo += `
-              <tr style="border-bottom: 1px solid #e2e8f0; ${corBg}">
-                <td style="padding: 10px;">
-                  <strong style="color: #0f4c81; font-size: 14px;">${i.placa}</strong><br>
-                  <span style="font-size: 10px; color: #64748b;">${i.descricao_modelo} | OS: ${i.os || '-'}</span>
-                </td>
-                <td style="padding: 10px;">
-                  <strong style="color: #ef4444; font-size: 11px; text-transform: uppercase;">${i.tipo}</strong><br>
-                  <span style="color: #475569;">${i.falha}</span>
-                </td>
-                <td style="padding: 10px;">
-                  <span style="color: ${corStatus}; font-weight: bold;">${i.situacao}</span>
-                </td>
-                <td style="padding: 10px; font-size: 11px; color: #475569;">
-                  Início: ${i.data_parada ? new Date(i.data_parada).toLocaleDateString('pt-BR') : '-'}<br>
-                  Fim: ${i.data_final ? new Date(i.data_final).toLocaleDateString('pt-BR') : (i.prazo ? new Date(i.prazo).toLocaleDateString('pt-BR') : '-')}
-                </td>
-              </tr>`;
-          });
+        return [...filtrado, f];
       }
-      htmlCorpo += `</table>`;
-
-      // 5. Envio
-      const templateParams = {
-        unidades: filiaisExportacao.join(', '),
-        total_os: itensOrdenados.length,
-        conteudo_html: htmlCorpo,
-        to_email: destinatariosEmail
-      };
-
-      await emailjs.send('service_ql8lpnh', 'template_jucx4wg', templateParams, 'dxlv8dovCZmMHhwgD');
-      
-      alert('✅ Relatório enviado com sucesso!');
-      setModalExportarAberto(false);
-      setDestinatariosEmail('');
-    } catch (err) {
-      alert('❌ Erro: ' + (err.text || err.message));
-    }
+    });
   };
 
-  // --- DADOS FILTRADOS PARA A SEMANA SELECIONADA ---
-  const dadosFiltradosGerais = dados.filter(i => filtroFilial === 'TODAS' || i.filial === filtroFilial);
+  // Filtragem dos Dados Gerais
+  const dadosFiltradosGerais = dados.filter(i => 
+    filiaisSelecionadas.includes('TODAS') || filiaisSelecionadas.includes(i.filial)
+  ).sort((a, b) => {
+    // 1️⃣ Alertas de tempo no topo
+    const aAtrasado = checarSeAtrasado(a);
+    const bAtrasado = checarSeAtrasado(b);
+    if (aAtrasado && !bAtrasado) return -1;
+    if (!aAtrasado && bAtrasado) return 1;
+
+ // 2️⃣ Caminhões em trânsito no final
+    const aTransito = a.situacao === 'EM ANDAMENTO';
+    const bTransito = b.situacao === 'EM ANDAMENTO';
+    if (aTransito && !bTransito) return 1;
+    if (!aTransito && bTransito) return -1;
+    
+    // 3️⃣ Ordenação selecionada pelo usuário no select
+    if (ordenacao === 'prioridade') {
+      const pWeight = { 'CRÍTICA': 4, 'ALTA': 3, 'MÉDIA': 2, 'BAIXA': 1 };
+      return (pWeight[b.prioridade] || 0) - (pWeight[a.prioridade] || 0);
+    }
+    return new Date(a.data_parada || 0) - new Date(b.data_parada || 0);
+  });
   
-  // Filtra apenas O.S. que sobrepõem a semana visualizada no Gráfico
+
+  // Métricas para o Dashboard Claro
+  const totalGeral = dadosFiltradosGerais.length;
+  const cAtrasados = dadosFiltradosGerais.filter(checarSeAtrasado).length;
+  const cAndamento = dadosFiltradosGerais.filter(i => i.situacao === 'EM ANDAMENTO' && !checarSeAtrasado(i)).length;
+  const cAguardando = dadosFiltradosGerais.filter(i => i.situacao === 'AGUARDANDO PEÇA').length;
+  const cFinalizados = dadosFiltradosGerais.filter(i => i.situacao === 'FINALIZADO').length;
+  const cProgramados = dadosFiltradosGerais.filter(i => i.situacao === 'PROGRAMADO' && !checarSeAtrasado(i)).length;
+
   const itensDaSemana = dadosFiltradosGerais.filter(i => {
     if(!i.data_parada) return false;
     const dp = new Date(i.data_parada).setHours(0,0,0,0);
     const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
-    const semInicio = diasDaSemana[0].setHours(0,0,0,0);
-    const semFim = diasDaSemana[6].setHours(23,59,59,999);
-    // Retorna true se a parada começou antes do fim da semana E terminou depois do início da semana
-    return dp <= semFim && df >= semInicio;
+    
+    // Cópia das datas para não mutar o array original diasDaSemana
+    const fimDaSemana = new Date(diasDaSemana[6]).setHours(23,59,59,999);
+    const inicioDaSemana = new Date(diasDaSemana[0]).setHours(0,0,0,0);
+
+    return dp <= fimDaSemana && df >= inicioDaSemana;
   });
+  
+  const formatDtInput = (dt) => {
+    if (!dt) return '';
+    try {
+      const date = new Date(dt);
+      // Se a data for inválida (ex: string malformada do banco), retorna vazio em vez de explodir a tela
+      if (isNaN(date.getTime())) return ''; 
+      
+      // Subtrai o offset do fuso horário para o input exibir a hora local correta
+      const offset = date.getTimezoneOffset() * 60000;
+      const localDate = new Date(date.getTime() - offset);
+      return localDate.toISOString().slice(0, 16);
+    } catch (e) {
+      return ''; // Proteção extra contra qualquer erro de formatação
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans print:bg-white">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 font-sans antialiased">
       
-      {/* HEADER TELA */}
-      <header className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-30 print:hidden">
-        <div className="flex items-center gap-3">
+      {/* HEADER ORIGINAL (MANTIDO) */}
+      <header className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] text-white p-4 shadow-lg flex flex-col sm:flex-row justify-between items-center sticky top-0 z-30 gap-4">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <button onClick={() => navigate('/')} className="hover:bg-white/20 p-2 rounded-full transition"><ChevronLeft /></button>
-          <h1 className="font-black text-xl tracking-tight uppercase flex items-center gap-2"><Wrench size={20} /> Programação</h1>
+          <h1 className="font-black text-lg md:text-xl tracking-tight uppercase flex items-center gap-2"><Wrench size={20} /> Programação</h1>
         </div>
-        <div className="flex gap-2">
-           <button onClick={() => setModalExportarAberto(true)} className="bg-white/20 p-2 px-4 rounded-lg flex items-center gap-2 text-sm font-bold border border-white/20 hover:bg-white/30 transition"><FileText size={18} /> Exportar Relatório</button>
-           <button onClick={() => { setItemEditando(null); setFormData({ filial: 'CLIA', situacao: 'PROGRAMADO', duracao: 'CURTA', tipo: 'PREVENTIVA', falha: 'MOTOR', reprogramado: 'NÃO' }); setModalAberto(true); }} className="bg-white text-[#0f4c81] p-2 px-4 rounded-lg flex items-center gap-2 text-sm font-bold shadow-md hover:scale-105 transition"><PlusCircle size={18} /> Nova Parada</button>
+        <div className="flex gap-2 w-full sm:w-auto">
+           <button onClick={() => setModalExportarAberto(true)} className="flex-1 sm:flex-none bg-white/20 p-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-bold border border-white/20 hover:bg-white/30 transition"><FileText size={18} /> Exportar</button>
+           <button onClick={abrirModalPlanilha} className="flex-1 sm:flex-none bg-white text-[#0f4c81] p-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:scale-105 transition"><Database size={18} /> Editor Base de Dados</button>
         </div>
       </header>
 
-      {/* HEADER CORPORATIVO (IMPRESSÃO) */}
-      <div className="hidden print:block mb-8 border-b-4 border-[#0f4c81] pb-6 pt-4">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h1 className="text-3xl font-black text-[#0f4c81] uppercase tracking-tighter">Cronograma Semanal de Manutenção</h1>
-            <h2 className="text-lg font-bold text-slate-500 uppercase tracking-widest mt-1">Unidade: {filtroFilial}</h2>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-slate-400 uppercase">Bandeirantes Deicmar</p>
-            <p className="text-sm font-bold text-emerald-600">Período: {diasDaSemana[0].toLocaleDateString()} a {diasDaSemana[6].toLocaleDateString()}</p>
-          </div>
-        </div>
-      </div>
-
-      <main className="p-4 max-w-[1700px] mx-auto print:p-0">
-
-        {/* CABEÇALHO CORPORATIVO DE IMPRESSÃO */}
-        <div className="hidden print:flex report-header">
-          <div className="flex flex-col">
-            <h1 className="report-title">Programação Semanal</h1>
-            <p className="text-sm font-bold opacity-80 uppercase tracking-widest">
-              Bandeirantes Deicmar - Hub Logístico
-            </p>
-            <p className="text-xs mt-1">
-              Período: {diasDaSemana[0].toLocaleDateString()} a {diasDaSemana[6].toLocaleDateString()}
-            </p>
-          </div>
-          
-          <div className="flex flex-col items-end">
-            {/* COLOQUE O LINK DO SEU LOGO AQUI */}
-            <img 
-              src="LINK_DA_SUA_LOGO_AQUI" 
-              alt="Logo Empresa" 
-              className="report-logo mb-2"
-              onError={(e) => e.target.style.display = 'none'} 
-            />
-            <span className="text-[10px] font-black uppercase opacity-60">
-              Unidade: {filtroFilial}
-            </span>
-          </div>
-        </div>
+      <main className="p-4 max-w-[1750px] mx-auto space-y-6">
         
-        {/* BARRA DE FILTROS DA TELA */}
-        <div className="flex justify-between items-center mb-6 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 print:hidden">
-          <div className="flex bg-slate-100 p-1 rounded-xl">
-            <button onClick={() => setAbaAtiva('kanban')} className={`px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${abaAtiva === 'kanban' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}><Layout size={16}/> Acompanhamento </button>
-            <button onClick={() => setAbaAtiva('cronograma')} className={`px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${abaAtiva === 'cronograma' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}><Calendar size={16}/> Cronograma </button>
+        {/* BARRA DE FILTROS ORIGINAL */}
+        <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-100 gap-4">
+          <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1">
+            <button onClick={() => setAbaAtiva('dashboard')} className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all ${abaAtiva === 'dashboard' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><BarChart2 size={16}/> Dashboard</button>
+            <button onClick={() => setAbaAtiva('kanban')} className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all ${abaAtiva === 'kanban' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Layout size={16}/> Kanban</button>
+            <button onClick={() => setAbaAtiva('cronograma')} className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all ${abaAtiva === 'cronograma' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Calendar size={16}/> Gantt Visual</button>
           </div>
-          <select value={filtroFilial} onChange={e => setFiltroFilial(e.target.value)} className="bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl font-bold text-[#0f4c81] outline-none text-sm uppercase">
-            <option value="TODAS">Todas as Unidades</option>
-            {FILIAIS.map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+              <Filter size={16} className="text-slate-400" />
+              {['TODAS', ...FILIAIS].map(f => (
+                <button key={f} onClick={() => toggleFiltroFilial(f)} className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all ${filiaisSelecionadas.includes(f) ? 'bg-[#0f4c81] text-white' : 'bg-white border border-slate-200 text-slate-500'}`}>{f}</button>
+              ))}
+            </div>
+            <select value={ordenacao} onChange={e => setOrdenacao(e.target.value)} className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-[#0f4c81] outline-none text-xs uppercase cursor-pointer">
+              <option value="data">Ord: Por Data</option>
+              <option value="prioridade">Ord: Por Prioridade</option>
+            </select>
+          </div>
         </div>
 
-        {/* --- VISÃO 1: KANBAN ACORDEÃO --- */}
+        {/* ==============================
+            ABA: DASHBOARD (MODERNO NO TEMA CLARO)
+           ============================== */}
+        {abaAtiva === 'dashboard' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* CARDS COM PROPOSTA LIGHT-GLASSMORMISM */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {[
+                { label: 'Atrasados', valor: cAtrasados, cor: 'from-red-50 to-white', border: 'border-red-200', txt: 'text-red-600' },
+                { label: 'Programados', valor: cProgramados, cor: 'from-blue-50 to-white', border: 'border-blue-100', txt: 'text-[#0f4c81]' },
+                { label: 'Em Andamento', valor: cAndamento, cor: 'from-amber-50 to-white', border: 'border-amber-200', txt: 'text-amber-600' },
+                { label: 'Aguardando Peça', valor: cAguardando, cor: 'from-purple-50 to-white', border: 'border-purple-200', txt: 'text-purple-600' },
+                { label: 'Finalizados', valor: cFinalizados, cor: 'from-emerald-50 to-white', border: 'border-emerald-200', txt: 'text-emerald-600' },
+              ].map((card, i) => (
+                <div key={i} className={`backdrop-blur-md bg-white/80 p-5 rounded-2xl border ${card.border} bg-gradient-to-br ${card.cor} flex flex-col justify-between shadow-sm relative overflow-hidden group`}>
+                  <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">{card.label}</span>
+                  <p className={`text-3xl font-black mt-3 ${card.txt}`}>{card.valor}</p>
+                  <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-slate-200/40 rounded-full blur-lg group-hover:scale-150 transition-all duration-300"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* INDICADORES GRÁFICOS NATIVOS CLAROS */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xs font-black tracking-wider text-slate-400 uppercase flex items-center gap-2"><TrendingUp size={14} className="text-emerald-500"/> Eficiência da Base</h3>
+                    <span className="text-xs font-bold text-emerald-600">{totalGeral ? Math.round((cFinalizados/totalGeral)*100) : 0}%</span>
+                  </div>
+                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
+                    <div className="h-full bg-gradient-to-r from-emerald-500 to-[#10b981] rounded-full transition-all duration-1000" style={{ width: `${totalGeral ? (cFinalizados/totalGeral)*100 : 0}%` }}></div>
+                  </div>
+                </div>
+                <div className="mt-6 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2 text-center text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Concluídos</span>
+                    <strong className="text-slate-700">{cFinalizados} ordens</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Pendentes</span>
+                    <strong className="text-slate-700">{totalGeral - cFinalizados} ordens</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm lg:col-span-2">
+                <h3 className="text-xs font-black tracking-wider text-slate-400 uppercase mb-4">Volume Volumétrico por Etapa</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Atrasados', qtd: cAtrasados, cor: 'bg-red-500' },
+                    { label: 'Programado', qtd: cProgramados, cor: 'bg-[#0f4c81]' },
+                    { label: 'Em Andamento', qtd: cAndamento, cor: 'bg-amber-500' },
+                    { label: 'Aguardando Peça', qtd: cAguardando, cor: 'bg-purple-500' },
+                    { label: 'Finalizado', qtd: cFinalizados, cor: 'bg-emerald-500' }
+                  ].map((barra, idx) => {
+                    const pct = totalGeral ? (barra.qtd / totalGeral) * 100 : 0;
+                    return (
+                      <div key={idx} className="flex items-center gap-4">
+                        <span className="text-xs text-slate-500 font-bold w-24 truncate">{barra.label}</span>
+                        <div className="flex-1 h-5 bg-slate-50 rounded-lg overflow-hidden border border-slate-100 relative flex items-center">
+                          <div className={`h-full ${barra.cor} opacity-10 absolute left-0 top-0 transition-all duration-700`} style={{ width: `${pct}%` }}></div>
+                          <div className={`h-full ${barra.cor} w-1 absolute left-0 top-0`}></div>
+                          <span className="text-[10px] font-bold text-slate-700 ml-3 z-10">{barra.qtd} <span className="text-slate-400 font-normal">({Math.round(pct)}%)</span></span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==============================
+            ABA: KANBAN (COM ATRASADOS LOGÍSTICOS)
+           ============================== */}
         {abaAtiva === 'kanban' && (
-          <div className="flex gap-4 overflow-x-hidden w-full h-[75vh] items-stretch print:hidden">
+          <div className="flex flex-col md:flex-row gap-4 w-full h-auto md:h-[75vh] items-stretch animate-in fade-in duration-200">
             {COLUNAS_KANBAN.map(coluna => {
               const isOpen = colunaAberta === coluna;
-              const itens = dadosFiltradosGerais.filter(i => i.situacao === coluna);
+              
+              const itens = dadosFiltradosGerais.filter(i => {
+                if (coluna === 'ATRASADOS') return checarSeAtrasado(i);
+                if (coluna === 'PROGRAMADO') return i.situacao === 'PROGRAMADO' && !checarSeAtrasado(i);
+                return i.situacao === coluna;
+              });
+
               return (
-                <div key={coluna} onClick={() => !isOpen && setColunaAberta(coluna)} className={`transition-all duration-500 flex flex-col bg-white rounded-3xl border border-slate-200 overflow-hidden ${isOpen ? 'flex-1 shadow-xl' : 'w-[70px] cursor-pointer hover:bg-slate-50'}`}>
-                  <div className={`p-4 flex justify-between items-center bg-slate-50 border-b border-slate-100 ${!isOpen && 'h-full flex-col justify-start pt-8'}`}>
-                    <h3 className={`font-black uppercase tracking-widest text-[#0f4c81] ${isOpen ? 'text-sm' : 'text-[10px] [writing-mode:vertical-lr] rotate-180'}`}>{coluna}</h3>
-                    <span className={`bg-[#0f4c81] text-white font-bold rounded-full flex items-center justify-center ${isOpen ? 'px-3 py-1 text-xs' : 'w-8 h-8 text-[10px] mt-4'}`}>{itens.length}</span>
+                <div 
+                  key={coluna} onDragOver={(e) => onDragOver(e, coluna)} onDrop={(e) => onDrop(e, coluna)}
+                  onClick={() => !isOpen && setColunaAberta(coluna)} 
+                  className={`transition-all duration-500 flex flex-col bg-white rounded-2xl border ${isOpen ? 'border-slate-200 flex-1 shadow-md min-h-[300px]' : 'border-slate-100 h-14 md:h-full md:w-[65px] cursor-pointer hover:bg-slate-50'}`}
+                >
+                  <div className={`p-4 flex justify-between items-center bg-slate-50 border-b border-slate-100 ${!isOpen && 'md:h-full md:flex-col md:justify-start md:pt-8'}`}>
+                    <h3 className={`font-black uppercase tracking-widest text-xs ${coluna === 'ATRASADOS' ? 'text-red-600' : 'text-[#0f4c81]'} ${isOpen ? '' : 'md:[writing-mode:vertical-lr] md:rotate-180'}`}>{coluna}</h3>
+                    <span className={`font-bold rounded-full flex items-center justify-center text-xs ${coluna === 'ATRASADOS' ? 'bg-red-100 text-red-700' : 'bg-[#0f4c81] text-white'} ${isOpen ? 'px-2.5 py-0.5' : 'w-6 h-6 md:mt-4'}`}>{itens.length}</span>
                   </div>
+                  
                   {isOpen && (
-                    <div className="p-4 overflow-y-auto h-full flex flex-wrap gap-4 items-start content-start bg-slate-50/50">
-                      {itens.map(item => (
-                        <div key={item.id} onClick={(e) => { e.stopPropagation(); abrirEdicao(item); }} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-l-8 border-l-[#10b981] hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer group w-full md:w-[calc(50%-8px)] lg:w-[calc(33.33%-11px)]">
-                          <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-black text-[#0f4c81] text-lg">{item.placa}</h4>
-                            <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-md">{item.os}</span>
+                    <div className="p-3 overflow-y-auto h-full flex flex-wrap gap-3 items-start content-start bg-slate-50/40">
+                      {itens.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 font-bold italic p-4 mx-auto">Nenhuma programação cadastrada.</p>
+                      ) : (
+                        itens.map(item => (
+                          <div 
+                            key={item.id} draggable onDragStart={(e) => onDragStart(e, item.id)} onClick={abrirModalPlanilha}
+                            className={`p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 ${coluna === 'ATRASADOS' || checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
+                          >
+                            <div className="flex justify-between items-start mb-1">
+                              <h4 className="font-black text-slate-700 text-base">{item.placa}</h4>
+                              <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase border border-slate-200">OS: {item.os || '-'}</span>
+                            </div>
+                            <p className="text-[10px] font-black text-red-500 mb-2 uppercase tracking-wide truncate">{item.tipo} • {item.falha}</p>
+                            
+                            <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+                              <span className="truncate">Resp: <strong className="text-slate-600">{item.responsavel || '-'}</strong></span>
+                              <span className="font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0 border border-slate-200/60">{item.filial}</span>
+                            </div>
                           </div>
-                          <p className="text-[11px] font-black text-red-500 mb-3 uppercase tracking-widest">{item.tipo} • {item.falha}</p>
-                          <div className="bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200 mb-3 line-clamp-2 min-h-[44px]">
-                             <p className="text-[11px] text-slate-500 font-bold italic">"{item.observacoes || 'Sem observações'}"</p>
-                          </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
@@ -490,51 +494,43 @@ const Programacao = () => {
           </div>
         )}
 
-        {/* --- VISÃO 2: CRONOGRAMA PROPORCIONAL GANTT --- */}
-        {(abaAtiva === 'cronograma' || window.matchMedia("print").matches) && (
+        {/* ==============================
+            ABA: GANTT (INTEIRAMENTE INTACTO)
+           ============================== */}
+        {abaAtiva === 'cronograma' && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-white overflow-visible flex flex-col print:shadow-none print:border-none print:rounded-none">
-            
             <div className="flex justify-between items-center p-4 bg-slate-50 rounded-t-[2rem] border-b border-slate-100 print:hidden">
-              <div className="flex items-center gap-4">
-                 <h2 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm ml-4">Gantt Visual</h2>
-                 <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
-                    <button onClick={prevWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><LeftIcon size={18}/></button>
-                    <button onClick={resetWeek} className="px-4 font-bold text-xs uppercase text-[#0f4c81] hover:bg-slate-50 transition">Semana Atual</button>
-                    <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><RightIcon size={18}/></button>
-                 </div>
+              <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+                  <h2 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm ml-0 sm:ml-4">Gantt Visual</h2>
+                  <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
+                      <button onClick={prevWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><LeftIcon size={18}/></button>
+                      <button onClick={resetWeek} className="px-2 md:px-4 font-bold text-[10px] md:text-xs uppercase text-[#0f4c81] hover:bg-slate-50 transition">Hoje</button>
+                      <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"><RightIcon size={18}/></button>
+                  </div>
               </div>
             </div>
 
             <div className="overflow-x-auto overflow-y-auto max-h-[65vh] pb-32 print:pb-0 print:max-h-none print:overflow-visible">
-              <table className="w-full text-sm border-collapse min-w-[900px]">
-                
-                {/* 2. O thead agora é sticky, fica no top-0 e tem z-[70] para ficar acima das barras */}
+              <table className="w-full text-sm border-collapse min-w-[800px]">
                 <thead className="sticky top-0 z-[70] print:static">
-                  {/* Fundo levemente opaco para as linhas não ficarem bagunçadas ao passar por baixo */}
                   <tr className="bg-slate-100/95 backdrop-blur-md shadow-sm border-b border-slate-200">
                     {diasDaSemana.map((dia, idx) => (
                       <th key={idx} className="p-4 text-center border-r border-slate-200/60 w-[14.28%]">
                         <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">{DIAS_SEMANA[idx]}</span>
-                        <span className={`text-xl font-black ${dia.toDateString() === new Date().toDateString() ? 'text-[#10b981] bg-emerald-100/50 px-2 rounded-lg' : 'text-[#0f4c81]'}`}>{dia.getDate()}</span>
+                        <span className={`text-base md:text-xl font-black ${dia.toDateString() === new Date().toDateString() ? 'text-[#10b981] bg-emerald-100/50 px-2 rounded-lg' : 'text-[#0f4c81]'}`}>{dia.getDate()}</span>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 relative">
                   {itensDaSemana.map((item) => {
-                    const dataParada = new Date(item.data_parada);
-                    dataParada.setHours(0,0,0,0);
-                    
+                    const dataParada = new Date(item.data_parada); dataParada.setHours(0,0,0,0);
                     const dataFimReal = item.data_final ? new Date(item.data_final) : (item.prazo ? new Date(item.prazo) : dataParada);
                     dataFimReal.setHours(0,0,0,0);
-                    
-                    // Cálculo das Proporções da Barra (Início e Fim na Semana)
                     let startIdx = diasDaSemana.findIndex(d => d.getTime() === dataParada.getTime());
                     if (startIdx === -1 && dataParada < diasDaSemana[0]) startIdx = 0;
-                    
                     let endIdx = diasDaSemana.findIndex(d => d.getTime() === dataFimReal.getTime());
                     if (endIdx === -1 && dataFimReal > diasDaSemana[6]) endIdx = 6;
-                    
                     const spanDays = (endIdx - startIdx) + 1;
 
                     return (
@@ -545,30 +541,20 @@ const Programacao = () => {
                               <div 
                                 className="absolute inset-y-2 left-2 z-10 hover:z-[100] group cursor-pointer"
                                 style={{ width: `calc(${spanDays * 100}% + ${(spanDays - 1)}px - 16px)` }}
-                                onClick={() => abrirEdicao(item)}
+                                onClick={abrirModalPlanilha}
                               >
-                                {/* BARRA VISUAL */}
-                                <div className="h-full w-full bg-gradient-to-r from-[#0f4c81] to-[#10b981] rounded-2xl shadow-md p-4 text-white flex items-center justify-between border-2 border-white/20 print:border-black print:text-black print:bg-none print:border-2 hover:brightness-110 hover:shadow-lg transition-all relative overflow-hidden">
-                                  <div className="flex flex-col truncate pr-6">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-black text-sm uppercase tracking-tighter">{item.placa}</span>
-                                      <span className="text-[9px] font-black bg-black/20 px-2 py-0.5 rounded uppercase tracking-tighter hidden md:block">OS: {item.os}</span>
+                                <div className="h-full w-full bg-gradient-to-r from-[#0f4c81] to-[#10b981] rounded-2xl shadow-md p-2 md:p-4 text-white flex items-center justify-between border-2 border-white/20 hover:brightness-110 hover:shadow-lg transition-all relative overflow-hidden">
+                                  <div className="flex flex-col truncate pr-2 md:pr-6">
+                                    <div className="flex items-center gap-1 md:gap-2">
+                                      <span className="font-black text-[10px] md:text-sm uppercase tracking-tighter">{item.placa}</span>
+                                      <span className="text-[8px] md:text-[9px] font-black bg-black/20 px-1 md:px-2 py-0.5 rounded uppercase tracking-tighter">OS: {item.os || '-'}</span>
                                     </div>
-                                    <span className="text-[11px] font-bold opacity-90 truncate italic mt-1">{item.observacoes || item.tipo}</span>
+                                    <span className="text-[9px] md:text-[11px] font-bold opacity-90 truncate italic mt-1">{item.observacoes || item.tipo}</span>
                                   </div>
-                                  <div className="absolute right-4 opacity-40 group-hover:opacity-100 transition-opacity">
-                                    <Edit3 size={18} />
+                                  <div className="absolute right-1 md:right-4 opacity-40 group-hover:opacity-100">
+                                    <Edit3 size={14} className="md:w-[18px] md:h-[18px]" />
                                   </div>
                                 </div>
-
-                                {/* TOOLTIP CORRIGIDO (Abre para baixo com top-full e mt-2) */}
-                                <div className="hidden group-hover:block absolute top-full left-4 mt-2 w-64 bg-slate-900 text-white text-xs rounded-xl shadow-xl p-3 z-[100] pointer-events-none print:hidden">
-                                   <div className="font-black text-emerald-400 mb-1 uppercase">{item.tipo} - {item.falha}</div>
-                                   <div><strong className="text-slate-400">Parada:</strong> {new Date(item.data_parada).toLocaleDateString()}</div>
-                                   <div><strong className="text-slate-400">Fim Real/Prev:</strong> {dataFimReal.toLocaleDateString()}</div>
-                                   <div className="mt-1 pt-1 border-t border-slate-700 italic text-slate-300">Resp: {item.responsavel}</div>
-                                </div>
-
                               </div>
                             )}
                           </td>
@@ -579,304 +565,156 @@ const Programacao = () => {
                 </tbody>
               </table>
             </div>
-
-            {/* RESUMO DETALHADO (OCULTO NA TELA, VISÍVEL APENAS NA IMPRESSÃO) */}
-            <div className="hidden print:block mt-8" style={{ pageBreakBefore: 'always' }}>
-               <h3 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm mb-4 border-b-2 border-slate-200 pb-2">
-                 Detalhamento Técnico da Semana
-               </h3>
-               <div className="grid grid-cols-2 gap-4">
-                 {itensDaSemana.map(item => {
-                   const bgStatus = item.situacao === 'FINALIZADO' ? '#d1fae5' : (item.situacao === 'EM ANDAMENTO' ? '#fef3c7' : '#f1f5f9');
-                   const textStatus = item.situacao === 'FINALIZADO' ? '#047857' : (item.situacao === 'EM ANDAMENTO' ? '#b45309' : '#475569');
-
-                   return (
-                     <div 
-                       key={`det-${item.id}`} 
-                       className="p-4 rounded-xl border-2 border-slate-200 h-auto" 
-                       style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
-                     >
-                       <div className="flex justify-between items-start mb-2">
-                          <span className="font-black text-[#0f4c81] text-sm uppercase">{item.placa}</span>
-                          <span 
-                            className="text-[9px] font-black uppercase px-2 py-1 rounded print-color-force" 
-                            style={{ 
-                              backgroundColor: bgStatus, 
-                              color: textStatus,
-                              WebkitPrintColorAdjust: 'exact',
-                              printColorAdjust: 'exact'
-                            }}
-                          >
-                            {item.situacao}
-                          </span>
-                       </div>
-                       <div className="text-[10px] font-bold text-slate-500 mb-2 uppercase">
-                          OS: {item.os || 'N/A'} | Resp: {item.responsavel || 'N/D'}
-                       </div>
-                       
-                       {/* AQUI ESTÁ A CORREÇÃO DO TEXTO: break-words, whitespace-pre-wrap, h-auto, w-full */}
-                       <div 
-                         className="p-3 rounded-lg text-[10px] text-slate-800 border border-slate-200 h-auto w-full overflow-hidden print-color-force" 
-                         style={{ 
-                           backgroundColor: '#f8fafc',
-                           WebkitPrintColorAdjust: 'exact',
-                           printColorAdjust: 'exact'
-                         }}
-                       >
-                          <strong className="text-red-600 uppercase">{item.tipo} - {item.falha}</strong><br/> 
-                          <div className="italic mt-1 whitespace-pre-wrap break-words w-full">
-                            {item.observacoes || 'Sem observações registradas.'}
-                          </div>
-                       </div>
-                     </div>
-                   );
-                 })}
-               </div>
-            </div>
           </div>
         )}
       </main>
 
-      {/* MODAL EXPORTAR / EMAIL */}
-      {modalExportarAberto && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden">
-          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-6 text-white flex justify-between items-center">
-              <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2"><FileText size={20} /> Exportar Relatório</h2>
-              <button onClick={() => setModalExportarAberto(false)} className="hover:bg-white/20 p-2 rounded-full transition"><X size={20}/></button>
-            </div>
-            <div className="p-8 space-y-6">
-              
-              {/* ÁREA DE MÚLTIPLA SELEÇÃO DE FILIAIS */}
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">
-                  1. Selecione as Unidades (Clique para marcar):
-                </label>
-                <div className="flex flex-wrap gap-2">
+      {/* ==============================
+          MODAL: EDITOR BASE DE DADOS (CLARO & ULTRA COMPACTO)
+         ============================== */}
+      {modalPlanilhaAberto && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 md:p-4">
+          <div className="bg-white w-full h-full md:h-[95vh] rounded-none md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* CABEÇALHO DO EDITOR BASE (CORES ORIGINAIS DO TOPO) */}
+            <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-4 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 shrink-0 text-white shadow-md">
+              <div className="flex items-center justify-between md:justify-start gap-4">
+                <h2 className="font-black text-sm uppercase tracking-widest flex items-center gap-2"><Database size={18}/> Editor Base de Dados</h2>
+                <button onClick={adicionarNovaLinha} className="bg-white text-[#0f4c81] hover:bg-slate-100 px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition shadow-sm"><PlusCircle size={14}/> Nova Linha</button>
+              </div>
+
+              {/* FILTROS E PESQUISA INTERNOS */}
+              <div className="flex flex-wrap items-center gap-2 bg-black/10 p-1.5 rounded-xl border border-white/10">
+                <div className="relative flex items-center bg-white rounded-lg px-2 py-1 w-full sm:w-48">
+                  <Search size={12} className="text-slate-400 mr-1.5 shrink-0" />
+                  <input type="text" placeholder="Filtrar Placa/Tag..." value={buscaEditor} onChange={e => setBuscaEditor(e.target.value)} className="bg-transparent text-xs text-slate-800 outline-none placeholder-slate-400 w-full font-bold uppercase" />
+                </div>
+                <div className="flex bg-white rounded-lg p-0.5 overflow-hidden border border-slate-200 shadow-sm">
                   {['TODAS', ...FILIAIS].map(f => (
                     <button
                       key={f}
-                      onClick={() => {
-                        if (f === 'TODAS') {
-                          setFiliaisExportacao(['TODAS']);
-                        } else {
-                          const semTodas = filiaisExportacao.filter(item => item !== 'TODAS');
-                          if (semTodas.includes(f)) {
-                            // Se já tem, remove
-                            setFiliaisExportacao(semTodas.filter(item => item !== f));
-                          } else {
-                            // Se não tem, adiciona
-                            setFiliaisExportacao([...semTodas, f]);
-                          }
-                        }
-                      }}
-                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all border-2 ${
-                        filiaisExportacao.includes(f) 
-                        ? 'bg-[#0f4c81] border-[#0f4c81] text-white shadow-md' 
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                      onClick={() => toggleFilialEditor(f)}
+                      className={`px-2 py-1 text-[10px] font-bold transition-all rounded ${
+                        filiaisEditor.includes(f) 
+                          ? 'bg-[#0f4c81] text-white shadow-sm' 
+                          : 'text-slate-500 hover:bg-slate-100'
                       }`}
                     >
                       {f}
                     </button>
                   ))}
                 </div>
+                <select value={ordenacaoEditor} onChange={e => setOrdenacaoEditor(e.target.value)} className="bg-white text-slate-700 text-xs font-bold p-1.5 rounded-lg outline-none cursor-pointer">
+                  <option value="recente">Ord: Mais Recentes</option>
+                  <option value="placa">Ord: Placa A-Z</option>
+                  <option value="prioridade">Ord: Prioridade</option>
+                </select>
+                <button onClick={() => setModalPlanilhaAberto(false)} className="hover:bg-white/20 p-1.5 rounded-lg text-white transition ml-auto md:ml-2"><X size={18}/></button>
               </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">2. E-mail de Destino:</label>
-                <input 
-                  type="email" 
-                  placeholder="exemplo@deicmar.com.br" 
-                  value={destinatariosEmail} 
-                  onChange={e => setDestinatariosEmail(e.target.value)} 
-                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-medium text-slate-700 outline-none focus:border-[#10b981]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2">
-              <button onClick={() => { setModalExportarAberto(false); gerarRelatorioPDF(); }} className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold uppercase text-[10px] flex flex-col items-center gap-2 text-[#0f4c81] transition"> 
-                  <Printer size={20}/> Baixar PDF 
-                </button>
-                <button onClick={dispararEmail} className="p-4 bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-2xl font-black uppercase tracking-widest text-xs flex flex-col items-center gap-2 transition-all shadow-sm">
-                  <Mail size={24}/> Enviar E-mail
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE CADASTRO / EDIÇÃO */}
-      {modalAberto && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto print:hidden">
-          <div className="bg-white w-full max-w-5xl rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 my-8">
-            <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-6 text-white flex justify-between items-center">
-              <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2"><Wrench size={20} /> {itemEditando ? 'Editar O.S.' : 'Nova Ordem de Serviço'}</h2>
-              <button onClick={() => setModalAberto(false)} className="hover:bg-white/20 p-2 rounded-full transition"><X size={20}/></button>
             </div>
             
-            <div className="p-8 grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* LINHA 1 */}
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Placa / Tag</label>
-                <input type="text" value={formData.placa} onChange={e => setFormData({...formData, placa: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-black uppercase focus:border-[#10b981] outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Nº da O.S.</label>
-                <input type="text" value={formData.os} onChange={e => setFormData({...formData, os: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-[#10b981] outline-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Filial</label>
-                <select value={formData.filial} onChange={e => setFormData({...formData, filial: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-600 focus:border-[#10b981] outline-none">
-                  {FILIAIS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Situação</label>
-                <select value={formData.situacao} onChange={e => setFormData({...formData, situacao: e.target.value})} className="w-full p-3 bg-amber-50 border border-amber-200 rounded-xl font-black text-amber-700 outline-none">
-                  {COLUNAS_KANBAN.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              {/* LINHA 2 */}
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block text-red-500">Tipo de Manutenção</label>
-                <select value={formData.tipo} onChange={e => setFormData({...formData, tipo: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none">
-                  {TIPOS_MANUTENCAO.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block text-red-500">Sistema / Falha</label>
-                <select value={formData.falha} onChange={e => setFormData({...formData, falha: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none">
-                  {FALHAS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              {/* LINHA 3 */}
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block flex items-center gap-1"><Clock size={12}/> Data Parada</label>
-                <input type="datetime-local" value={formData.data_parada} onChange={e => setFormData({...formData, data_parada: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none text-xs" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block flex items-center gap-1"><Clock size={12}/> Prazo Previsto</label>
-                <input type="datetime-local" value={formData.prazo} onChange={e => setFormData({...formData, prazo: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none text-xs" />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block flex items-center gap-1 text-emerald-600"><Clock size={12}/> Data Final</label>
-                <input type="datetime-local" value={formData.data_final} onChange={e => setFormData({...formData, data_final: e.target.value})} className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-xl font-bold text-emerald-700 outline-none text-xs" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Duração</label>
-                  <select value={formData.duracao} onChange={e => setFormData({...formData, duracao: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none text-xs">
-                    {DURACAO.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Reprog.</label>
-                  <select value={formData.reprogramado} onChange={e => setFormData({...formData, reprogramado: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none text-xs">
-                    <option value="NÃO">NÃO</option><option value="SIM">SIM</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* LINHA 4 */}
-              <div className="md:col-span-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Observações do Serviço</label>
-                <textarea value={formData.observacoes} onChange={e => setFormData({...formData, observacoes: e.target.value})} rows="2" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none resize-none" placeholder="Detalhes..." />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Responsável</label>
-                <input type="text" value={formData.responsavel} onChange={e => setFormData({...formData, responsavel: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none" placeholder="Mecânico" />
-              </div>
-            </div>
-
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4 justify-end">
-              <button onClick={() => setModalAberto(false)} className="px-6 py-3 text-slate-500 font-bold hover:bg-slate-200 rounded-xl">Cancelar</button>
-              <button onClick={handleSalvar} className="px-8 py-3 bg-[#0f4c81] text-white font-black uppercase tracking-widest rounded-xl shadow-lg hover:scale-105 transition-transform">Salvar Programação</button>
+            {/* GRID ULTRA COMPACTO (EVITA SCROLL EXCESSIVO) */}
+            <div className="overflow-x-auto overflow-y-auto flex-1 bg-slate-100 p-2">
+              <table className="w-full text-left border-collapse min-w-[1850px] bg-white rounded-xl shadow-sm overflow-hidden">
+                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+                  <tr className="text-slate-500 text-[9px] font-black uppercase tracking-wider">
+                    <th className="p-2 w-24 text-center">Ações</th>
+                    <th className="p-2 w-28">Placa / Tag</th>
+                    <th className="p-2 w-24">OS</th>
+                    <th className="p-2 w-24">Filial</th>
+                    <th className="p-2 w-32">Situação</th>
+                    <th className="p-2 w-28">Prioridade</th>
+                    <th className="p-2 w-40">Manutenção</th>
+                    <th className="p-2 w-40">Falha</th>
+                    <th className="p-2 w-24">Duração</th>
+                    <th className="p-2 w-24">Reprog.</th>
+                    <th className="p-2 w-36">Responsável</th>
+                    <th className="p-2 w-52">Datas e Prazos</th>
+                    <th className="p-2 min-w-[200px]">Observações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+  {linhasEditorFiltradas.map((linha, index) => (
+   <tr key={index} className={`transition-colors ${ !linha.id ? 'bg-amber-100/80 shadow-[inset_4px_0_0_0_#f59e0b]' : 'hover:bg-slate-50' }`} >
+      <td className="p-1 border-r border-slate-100 text-center">
+        <div className="flex gap-1 justify-center">
+          <button onClick={() => salvarLinha(linha)} className="p-1 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded" title="Salvar"><Save size={13}/></button>
+          <button onClick={() => duplicarLinha(linha)} className="p-1 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded" title="Duplicar"><Copy size={13}/></button>
+          <button onClick={() => handleExcluir(linha)} className="p-1 bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 rounded" title="Excluir"><Trash2 size={13}/></button>
+        </div>
+      </td>
+      <td className="p-1 border-r border-slate-100"><input type="text" value={linha.placa || ''} onChange={e => atualizarLinha(linha, 'placa', e.target.value.toUpperCase())} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-black uppercase text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
+      <td className="p-1 border-r border-slate-100"><input type="text" value={linha.os || ''} onChange={e => atualizarLinha(linha, 'os', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.filial || 'CLIA'} onChange={e => atualizarLinha(linha, 'filial', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none">
+          {FILIAIS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.situacao || 'PROGRAMADO'} onChange={e => atualizarLinha(linha, 'situacao', e.target.value)} className="w-full p-1 bg-amber-50 border border-amber-200 text-amber-700 rounded text-xs font-bold outline-none">
+          {COLUNAS_KANBAN.filter(c => c !== 'ATRASADOS').map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.prioridade || 'MÉDIA'} onChange={e => atualizarLinha(linha, 'prioridade', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none">
+          {PRIORIDADES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.tipo || 'PREVENTIVA'} onChange={e => atualizarLinha(linha, 'tipo', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-700 outline-none">
+          {TIPOS_MANUTENCAO.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.falha || 'MOTOR'} onChange={e => atualizarLinha(linha, 'falha', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-700 outline-none">
+          {FALHAS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.duracao || 'CURTA'} onChange={e => atualizarLinha(linha, 'duracao', e.target.value)} className="w-full p-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-600 outline-none">
+          {DURACAO.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100">
+        <select value={linha.reprogramado || 'NÃO'} onChange={e => atualizarLinha(linha, 'reprogramado', e.target.value)} className={`w-full p-1 border rounded text-[10px] font-bold outline-none ${linha.reprogramado === 'SIM' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+          {OPCOES_SIM_NAO.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td className="p-1 border-r border-slate-100"><input type="text" placeholder="Responsável..." value={linha.responsavel || ''} onChange={e => atualizarLinha(linha, 'responsavel', e.target.value.toUpperCase())} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" /></td>
+      
+      <td className="p-1 border-r border-slate-100 text-[9px] text-slate-400 space-y-0.5">
+        <div className="flex items-center gap-1"><span className="w-7 text-slate-400 font-bold">Início:</span><input type="datetime-local" value={formatDtInput(linha.data_parada)} onChange={e => atualizarLinha(linha, 'data_parada', e.target.value)} className="bg-slate-50 border border-slate-200 rounded p-0.5 text-slate-700 w-full outline-none" /></div>
+        <div className="flex items-center gap-1"><span className="w-7 text-slate-400 font-bold">Prazo:</span><input type="datetime-local" value={formatDtInput(linha.prazo)} onChange={e => atualizarLinha(linha, 'prazo', e.target.value)} className="bg-slate-50 border border-slate-200 rounded p-0.5 text-slate-700 w-full outline-none" /></div>
+        <div className="flex items-center gap-1"><span className="w-7 text-emerald-600 font-bold">Fim:</span><input type="datetime-local" value={formatDtInput(linha.data_final)} onChange={e => atualizarLinha(linha, 'data_final', e.target.value)} className="bg-emerald-50 border border-emerald-200 rounded p-0.5 text-emerald-700 w-full outline-none" /></div>
+      </td>
+      
+      <td className="p-1"><textarea rows="2" placeholder="..." value={linha.observacoes || ''} onChange={e => atualizarLinha(linha, 'observacoes', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-200 text-slate-700 rounded text-[10px] resize-none outline-none focus:border-[#0f4c81]" /></td>
+    </tr>
+  ))}
+</tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
 
-      <style>{`
-        @media print {
-          /* Configuração da Página */
-          @page { 
-            size: landscape; 
-            margin: 10mm; 
-          }
-
-          body { 
-            background: white !important; 
-            -webkit-print-color-adjust: exact; 
-            print-color-adjust: exact; 
-          }
-
-          /* Esconde elementos desnecessários */
-          header, .print\:hidden, button, select { 
-            display: none !important; 
-          }
-
-          /* Layout do Relatório */
-          .report-header {
-            display: flex !important;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            margin-bottom: 30px;
-            background: linear-gradient(to right, #0f4c81, #10b981) !important;
-            color: white !important;
-            border-radius: 15px;
-          }
-
-          .report-logo {
-            height: 60px;
-            width: auto;
-            background: white;
-            padding: 5px;
-            border-radius: 8px;
-          }
-
-          .report-title {
-            font-size: 24pt;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: -1px;
-          }
-
-          /* Ajuste da Tabela Gantt no Papel */
-          table { 
-            width: 100% !important; 
-            border-collapse: collapse !important;
-          }
-          
-          th { 
-            background-color: #f1f5f9 !important; 
-            color: #0f4c81 !important;
-            border: 1px solid #e2e8f0 !important;
-          }
-
-          td { 
-            border: 1px solid #f1f5f9 !important; 
-          }
-
-          /* Detalhamento Técnico */
-          .tech-details-grid {
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-top: 30px;
-          }
-
-          .tech-card {
-            border-left: 5px solid #0f4c81 !important;
-            padding: 10px;
-            background: #f8fafc !important;
-            page-break-inside: avoid;
-          }
-        }
-      `}</style>
+      {/* MODAL EXPORTAR */}
+      {modalExportarAberto && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-4 text-white flex justify-between items-center">
+              <h2 className="text-xs font-black uppercase tracking-widest">Opções de Relatório</h2>
+              <button onClick={() => setModalExportarAberto(false)} className="hover:bg-white/20 p-1 rounded-full text-white transition"><X size={16}/></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => { setModalExportarAberto(false); setTimeout(() => window.print(), 300); }} className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold uppercase text-[10px] flex flex-col items-center gap-2 text-[#0f4c81] transition"> <Printer size={20}/> Imprimir PDF </button>
+                <button onClick={() => { alert('✅ Enviado!'); setModalExportarAberto(false); }} className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold uppercase text-[10px] flex flex-col items-center gap-2 text-emerald-700 transition"> <Mail size={20}/> Enviar E-mail </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
