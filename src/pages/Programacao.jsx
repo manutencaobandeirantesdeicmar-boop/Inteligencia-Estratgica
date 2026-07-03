@@ -124,37 +124,31 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
       doc.setTextColor(15, 76, 129); 
       doc.text('Plano de Manutenção Semanal', 14, 20);
 
-      // 2. Informações de Filtro (AGORA PUXA OS FILTROS REAIS DA TELA)
+      // 2. Informações de Filtro
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
-      doc.text(`Filiais Filtradas: ${filiaisSelecionadas.join(', ')}`, 14, 28);
+      doc.text(`Filiais Filtradas: ${filiaisSelecionadas.join(', ')}`, 14, 28); 
       
       const dataInicio = diasDaSemana[0]?.toLocaleDateString('pt-BR');
       const dataFim = diasDaSemana[6]?.toLocaleDateString('pt-BR');
       doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, 33);
 
       // ==========================================
-      // NOVA PARTE VISUAL: ESTILO GANTT TIMELINE
+      // NOVA PARTE VISUAL: GANTT IDÊNTICO À TELA
       // ==========================================
-      // Monta o cabeçalho: 1ª coluna = Equipamento, demais = Dias da Semana
-      const colunasGantt = [
-        'Equipamento', 
-        ...diasDaSemana.map((dia, idx) => `${DIAS_SEMANA[idx]}\n${dia.getDate()}/${(dia.getMonth() + 1).toString().padStart(2, '0')}`)
-      ];
+      const colunasGantt = diasDaSemana.map((dia, idx) => {
+        return `${DIAS_SEMANA[idx]}\n${dia.getDate()}/${(dia.getMonth() + 1).toString().padStart(2, '0')}`;
+      });
 
-      // Usamos 'itensDaSemana' diretamente! Respeita todos os filtros da tela.
       const linhasGantt = itensDaSemana.map(item => {
         const dp = new Date(item.data_parada).setHours(0,0,0,0);
         const df = item.data_final ? new Date(item.data_final).setHours(0,0,0,0) : (item.prazo ? new Date(item.prazo).setHours(0,0,0,0) : dp);
 
-        // Primeira coluna da linha
-        const linha = [`${item.placa}\nOS: ${item.os || '-'}`];
-
-        // Verifica dia a dia se a máquina está parada
+        const linha = [];
         diasDaSemana.forEach(dia => {
           const diaAtual = dia.getTime();
           if (dp <= diaAtual && df >= diaAtual) {
-            linha.push('OCUPADO'); // Marcador secreto para colorir a célula
+            linha.push(`${item.placa} ${item.os ? `(${item.os})` : ''}`);
           } else {
             linha.push('');
           }
@@ -167,17 +161,29 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
         head: [colunasGantt],
         body: linhasGantt,
         theme: 'grid',
-        headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 9 },
-        styles: { fontSize: 8, halign: 'center', valign: 'middle', cellPadding: 3, lineColor: [220, 226, 230], lineWidth: 0.1 },
-        columnStyles: {
-          0: { halign: 'left', fontStyle: 'bold', cellWidth: 40, fillColor: [250, 250, 250] } // Destaca a coluna do Equipamento
+        headStyles: { 
+          fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 8, cellPadding: 2 
+        },
+        styles: { 
+          fontSize: 7, 
+          halign: 'left', 
+          valign: 'middle', 
+          cellPadding: 1, 
+          lineColor: [220, 226, 230], 
+          lineWidth: 0.1,
+          minCellHeight: 6, 
+          overflow: 'hidden' 
         },
         didParseCell: function (data) {
-          // Lógica que cria a "Barra do Gantt" pintando a célula inteira
-          if (data.section === 'body' && data.column.index > 0) {
-            if (data.cell.raw === 'OCUPADO') {
-              data.cell.text = ''; // Esconde a palavra
-              data.cell.styles.fillColor = [16, 185, 129]; // Pinta a célula de verde esmeralda contínuo
+          if (data.section === 'body') {
+            if (data.cell.raw !== '') {
+              data.cell.styles.fillColor = [16, 185, 129];
+              data.cell.styles.textColor = [255, 255, 255]; 
+              data.cell.styles.fontStyle = 'bold';
+
+              if (data.column.index > 0 && data.row.raw[data.column.index - 1] !== '') {
+                data.cell.text = ''; 
+              }
             }
           }
         },
@@ -185,7 +191,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
       });
 
       // ==========================================
-      // 4. Montar os dados da Tabela Detalhada
+      // 4. Montar os dados da Tabela Detalhada (COM HORA INCLUÍDA)
       // ==========================================
       const proximoY = doc.lastAutoTable.finalY + 12;
       doc.setFontSize(13);
@@ -195,15 +201,26 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
       const colunas = ["Máquina", "Filial", "OS", "Tipo / Falha", "Período", "Responsável", "Observações"];
       
       const linhas = itensDaSemana.map(item => {
-        const inicio = new Date(item.data_parada).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-        const fim = item.data_final ? new Date(item.data_final).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : (item.prazo ? new Date(item.prazo).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : inicio);
+        // Função para formatar Data e Hora juntas (ex: 03/07/26 14:30)
+        const formatarDataHora = (dataStr) => {
+          if (!dataStr) return '-';
+          return new Date(dataStr).toLocaleString('pt-BR', { 
+            timeZone: 'UTC', 
+            day: '2-digit', month: '2-digit', year: '2-digit', 
+            hour: '2-digit', minute: '2-digit' 
+          }).replace(',', ''); 
+        };
+
+        const inicio = formatarDataHora(item.data_parada);
+        const refFim = item.data_final ? item.data_final : (item.prazo ? item.prazo : item.data_parada);
+        const fim = formatarDataHora(refFim);
         
         return [
           item.placa,
           item.filial,
           item.os || '-',
           `${item.tipo}\nFalha: ${item.falha}`, 
-          `De: ${inicio}\nAté: ${fim}`,
+          `Início: ${inicio}\nFim: ${fim}`,
           item.responsavel || '-',
           item.observacoes || '-'
         ];
@@ -216,14 +233,14 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
         body: linhas,
         theme: 'grid',
         headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center' },
-        styles: { fontSize: 8, valign: 'middle' },
+        styles: { fontSize: 8, valign: 'middle', cellPadding: 1.5, minCellHeight: 7 }, 
         columnStyles: {
           0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, 
-          1: { halign: 'center', cellWidth: 20 }, 
-          2: { halign: 'center', cellWidth: 25 }, 
-          3: { cellWidth: 45 }, 
-          4: { cellWidth: 35 }, 
-          5: { cellWidth: 40 }, 
+          1: { halign: 'center', cellWidth: 15 }, 
+          2: { halign: 'center', cellWidth: 22 }, 
+          3: { cellWidth: 43 }, 
+          4: { cellWidth: 42 }, // <- Aumentada para caber a data e hora perfeitamente
+          5: { cellWidth: 35 }, 
         },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
