@@ -25,7 +25,7 @@ const Programacao = () => {
   const [abaAtiva, setAbaAtiva] = useState('dashboard'); 
   
   // Filtros Globais da Tela Principal
-const [filiaisSelecionadas, setFiliaisSelecionadas] = useState([]);  const [ordenacao, setOrdenacao] = useState('data'); 
+const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
   const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
   
   // Filtros Exclusivos do Editor Base de Dados
@@ -246,6 +246,19 @@ const toggleFiltroFilial = (f) => {
   const dadosFiltradosGerais = dados.filter(i => 
     filiaisSelecionadas.includes('TODAS') || filiaisSelecionadas.includes(i.filial)
   ).sort((a, b) => {
+    // 1️⃣ Alertas de tempo no topo
+    const aAtrasado = checarSeAtrasado(a);
+    const bAtrasado = checarSeAtrasado(b);
+    if (aAtrasado && !bAtrasado) return -1;
+    if (!aAtrasado && bAtrasado) return 1;
+
+    // 2️⃣ Caminhões em trânsito no final
+    const aTransito = a.situacao === 'EM ANDAMENTO';
+    const bTransito = b.situacao === 'EM ANDAMENTO';
+    if (aTransito && !bTransito) return 1;
+    if (!aTransito && bTransito) return -1;
+
+    // 3️⃣ Ordenação selecionada pelo usuário no select
     if (ordenacao === 'prioridade') {
       const pWeight = { 'CRÍTICA': 4, 'ALTA': 3, 'MÉDIA': 2, 'BAIXA': 1 };
       return (pWeight[b.prioridade] || 0) - (pWeight[a.prioridade] || 0);
