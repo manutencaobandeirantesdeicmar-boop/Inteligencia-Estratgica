@@ -81,75 +81,96 @@ const Programacao = () => {
   // GERADOR DE RELATÓRIO PDF REAL
   // ==============================
   const gerarRelatorioPDF = () => {
-    // Cria um novo documento A4 em modo paisagem (landscape) para caber mais dados
-    const doc = new jsPDF('landscape');
+    try {
+      // Cria um novo documento A4 em modo paisagem (landscape) para caber mais dados
+      const doc = new jsPDF('landscape');
 
-    // 1. Configurações de Título
-    doc.setFontSize(22);
-    doc.setTextColor(15, 76, 129); // Azul do seu tema (#0f4c81)
-    doc.text('Plano de Manutenção Semanal', 14, 20);
+      // 1. Configurações de Título
+      doc.setFontSize(22);
+      doc.setTextColor(15, 76, 129); // Azul do seu tema (#0f4c81)
+      doc.text('Plano de Manutenção Semanal', 14, 20);
 
-    // 2. Informações de Filtro (Subtítulo)
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Filiais Filtradas: ${filiaisSelecionadas.join(', ')}`, 14, 28);
-    
-    const dataInicio = diasDaSemana[0]?.toLocaleDateString('pt-BR');
-    const dataFim = diasDaSemana[6]?.toLocaleDateString('pt-BR');
-    doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, 33);
-
-    // 3. Montar os dados da Tabela
-    const colunas = ["Máquina", "Filial", "OS", "Tipo / Falha", "Período", "Responsável", "Observações"];
-    
-    const linhas = itensDaSemana.map(item => {
-      const inicio = new Date(item.data_parada).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-      const fim = item.data_final ? new Date(item.data_final).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : (item.prazo ? new Date(item.prazo).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : inicio);
+      // 2. Informações de Filtro (Subtítulo corrigido)
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Filiais Filtradas: ${filiaisExportacao.join(', ')}`, 14, 28);
       
-      return [
-        item.placa,
-        item.filial,
-        item.os || '-',
-        `${item.tipo}\nFalha: ${item.falha}`, // Quebra de linha dentro da célula
-        `De: ${inicio}\nAté: ${fim}`,
-        item.responsavel || '-',
-        item.observacoes || '-'
-      ];
-    });
+      const dataInicio = diasDaSemana[0]?.toLocaleDateString('pt-BR');
+      const dataFim = diasDaSemana[6]?.toLocaleDateString('pt-BR');
+      doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, 33);
 
-    // 4. Gerar a Tabela no PDF
-    doc.autoTable({
-      startY: 40,
-      head: [colunas],
-      body: linhas,
-      theme: 'grid',
-      headStyles: { 
-        fillColor: [15, 76, 129], // Fundo azul do cabeçalho
-        textColor: 255, 
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      styles: { 
-        fontSize: 8,
-        valign: 'middle' 
-      },
-      columnStyles: {
-        0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, // Máquina
-        1: { halign: 'center', cellWidth: 20 }, // Filial
-        2: { halign: 'center', cellWidth: 25 }, // OS
-        3: { cellWidth: 45 }, // Tipo/Falha
-        4: { cellWidth: 35 }, // Período
-        5: { cellWidth: 40 }, // Responsável
-        // Observações ocupa o restante do espaço
-      },
-      alternateRowStyles: {
-        fillColor: [245, 247, 250] // Linhas zebradas bem suaves
-      },
-      // Mensagem caso não tenha nada na semana
-      emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
-    });
+      // 3. Filtrar dados respeitando as caixinhas marcadas no Modal (igual ao disparo de E-mail)
+      const dadosParaExportacao = dados.filter(i => {
+        if(!i.data_parada) return false;
+        
+        const atendeFilial = filiaisExportacao.includes('TODAS') || filiaisExportacao.includes(i.filial);
+        if (!atendeFilial) return false;
+        
+        const dp = new Date(i.data_parada).setHours(0,0,0,0);
+        const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
+        const semInicio = diasDaSemana[0].setHours(0,0,0,0);
+        const semFim = diasDaSemana[6].setHours(23,59,59,999);
+        
+        return dp <= semFim && df >= semInicio;
+      });
 
-    // 5. Salva e baixa o arquivo na máquina do usuário
-    doc.save(`Plano_Manutencao_${dataInicio.replace(/\//g, '-')}.pdf`);
+      // 4. Montar os dados da Tabela
+      const colunas = ["Máquina", "Filial", "OS", "Tipo / Falha", "Período", "Responsável", "Observações"];
+      
+      const linhas = dadosParaExportacao.map(item => {
+        const inicio = new Date(item.data_parada).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        const fim = item.data_final ? new Date(item.data_final).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : (item.prazo ? new Date(item.prazo).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : inicio);
+        
+        return [
+          item.placa,
+          item.filial,
+          item.os || '-',
+          `${item.tipo}\nFalha: ${item.falha}`, // Quebra de linha dentro da célula
+          `De: ${inicio}\nAté: ${fim}`,
+          item.responsavel || '-',
+          item.observacoes || '-'
+        ];
+      });
+
+      // 5. Gerar a Tabela no PDF
+      doc.autoTable({
+        startY: 40,
+        head: [colunas],
+        body: linhas,
+        theme: 'grid',
+        headStyles: { 
+          fillColor: [15, 76, 129], // Fundo azul do cabeçalho
+          textColor: 255, 
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        styles: { 
+          fontSize: 8,
+          valign: 'middle' 
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', halign: 'center', cellWidth: 25 }, // Máquina
+          1: { halign: 'center', cellWidth: 20 }, // Filial
+          2: { halign: 'center', cellWidth: 25 }, // OS
+          3: { cellWidth: 45 }, // Tipo/Falha
+          4: { cellWidth: 35 }, // Período
+          5: { cellWidth: 40 }, // Responsável
+          // Observações ocupa o restante do espaço
+        },
+        alternateRowStyles: {
+          fillColor: [245, 247, 250] // Linhas zebradas bem suaves
+        },
+        emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
+      });
+
+      // 6. Salva e baixa o arquivo na máquina do usuário
+      doc.save(`Plano_Manutencao_${dataInicio.replace(/\//g, '-')}.pdf`);
+
+    } catch (error) {
+      // Caso ocorra algum outro erro no futuro, um alerta aparecerá na tela em vez de falhar em silêncio
+      alert("Erro ao gerar o PDF: " + error.message);
+      console.error("Erro detalhado do PDF:", error);
+    }
   };
 
   const handleSalvar = async () => {
