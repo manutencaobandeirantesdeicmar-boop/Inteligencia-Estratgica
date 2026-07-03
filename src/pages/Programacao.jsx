@@ -180,6 +180,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
       },
       emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
     });
+    
     // 5. Salva e baixa o arquivo na máquina do usuário
     doc.save(`Plano_Manutencao_${dataInicio.replace(/\//g, '-')}.pdf`);
   };
@@ -826,8 +827,9 @@ const toggleFiltroFilial = (f) => {
             </div>
           </div>
         </div>
-     
-    </div>
+      )} {/* <-- AQUI ESTÁ A CORREÇÃO: Fecha o modalExportarAberto */}
+
+    </div> {/* <-- Fecha a div principal (min-h-screen) de toda a tela */}
   );
 };
 
