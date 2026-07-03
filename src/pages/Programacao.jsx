@@ -903,9 +903,8 @@ const toggleFiltroFilial = (f) => {
             </div>
           </div>
         </div>
-      )} {/* <-- AQUI ESTÁ A CORREÇÃO: Fecha o modalExportarAberto */}
-
-    </div> {/* <-- Fecha a div principal (min-h-screen) de toda a tela */}
+      )} 
+    </div>
   );
 };
 
