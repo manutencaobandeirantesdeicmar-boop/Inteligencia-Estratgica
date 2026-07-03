@@ -152,7 +152,7 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
     });
 
     // 4. Gerar a Tabela no PDF
-    doc.autoTable({
+    autoTable(doc, {
       startY: 40,
       head: [colunas],
       body: linhas,
@@ -174,15 +174,12 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
         3: { cellWidth: 45 }, // Tipo/Falha
         4: { cellWidth: 35 }, // Período
         5: { cellWidth: 40 }, // Responsável
-        // Observações ocupa o restante do espaço
       },
       alternateRowStyles: {
         fillColor: [245, 247, 250] // Linhas zebradas bem suaves
       },
-      // Mensagem caso não tenha nada na semana
       emptyMessage: "Nenhuma manutenção programada para a semana e filtros selecionados."
     });
-
     // 5. Salva e baixa o arquivo na máquina do usuário
     doc.save(`Plano_Manutencao_${dataInicio.replace(/\//g, '-')}.pdf`);
   };
@@ -776,6 +773,7 @@ const toggleFiltroFilial = (f) => {
         </div>
       )}
 
+       )}
       {/* MODAL EXPORTAR */}
       {modalExportarAberto && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -784,15 +782,51 @@ const toggleFiltroFilial = (f) => {
               <h2 className="text-xs font-black uppercase tracking-widest">Opções de Relatório</h2>
               <button onClick={() => setModalExportarAberto(false)} className="hover:bg-white/20 p-1 rounded-full text-white transition"><X size={16}/></button>
             </div>
+            
             <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => { setModalExportarAberto(false); gerarRelatorioPDF(); }} className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold uppercase text-[10px] flex flex-col items-center gap-2 text-[#0f4c81] transition"> <Printer size={20}/> Baixar PDF </button>
-                <button onClick={() => { alert('✅ Enviado!'); setModalExportarAberto(false); }} className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold uppercase text-[10px] flex flex-col items-center gap-2 text-emerald-700 transition"> <Mail size={20}/> Enviar E-mail </button>
+              
+              {/* Campo para digitar os e-mails */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Destinatários de E-mail</label>
+                <input
+                  type="text"
+                  placeholder="email@empresa.com.br (separe por vírgula)"
+                  value={destinatariosEmail}
+                  onChange={(e) => setDestinatariosEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]"
+                />
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <button 
+                  onClick={() => { 
+                    setModalExportarAberto(false); 
+                    gerarRelatorioPDF(); 
+                  }} 
+                  className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold uppercase text-[10px] flex flex-col items-center gap-2 text-[#0f4c81] transition"
+                > 
+                  <Printer size={20}/> Baixar PDF 
+                </button>
+                
+                <button 
+                  onClick={() => { 
+                    if (!destinatariosEmail.trim()) {
+                      alert('⚠️ Por favor, digite pelo menos um e-mail antes de enviar.');
+                      return;
+                    }
+                    alert(`✅ Enviado com sucesso para: ${destinatariosEmail}`); 
+                    setModalExportarAberto(false); 
+                  }} 
+                  className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold uppercase text-[10px] flex flex-col items-center gap-2 text-emerald-700 transition"
+                > 
+                  <Mail size={20}/> Enviar E-mail 
+                </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+     
     </div>
   );
 };
