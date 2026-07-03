@@ -25,8 +25,10 @@ const Programacao = () => {
   const [abaAtiva, setAbaAtiva] = useState('dashboard'); 
   
   // Filtros Globais da Tela Principal
+// Filtros Globais da Tela Principal
 const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
-  const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
+const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
+const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
   
   // Filtros Exclusivos do Editor Base de Dados
   const [buscaEditor, setBuscaEditor] = useState('');
@@ -173,20 +175,27 @@ const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
     }
   };
 
-  const handleExcluir = async (linhaRef) => {
-    if (!window.confirm("⚠️ Deseja excluir este item permanentemente?")) return;
-    
-    if (!linhaRef.id) {
-      // Se não tem ID, é uma linha nova não salva; apenas removemos da tela
-      const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
-    
-    const { error } = await supabase.from('programacao').delete().eq('id', linhaRef.id);
-    if (!error) {
-      const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
-      setLinhasPlanilha(novasLinhas);
-      fetchProgramacao();
-    }
-  };
+  cconst handleExcluir = async (linhaRef) => {
+  if (!window.confirm("⚠️ Deseja excluir este item permanentemente?")) return;
+  
+  if (!linhaRef.id) {
+    // Se não tem ID, é uma linha nova não salva; apenas removemos da tela
+    const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
+    setLinhasPlanilha(novasLinhas);
+    return; // 👈 O return é essencial aqui para ele não tentar apagar no banco
+  }
+
+  // Se tem ID, apaga no Supabase
+  const { error } = await supabase.from('programacao').delete().eq('id', linhaRef.id);
+  
+  if (!error) {
+    const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
+    setLinhasPlanilha(novasLinhas);
+    fetchProgramacao();
+  } else {
+    alert("Erro ao excluir: " + error.message);
+  }
+};
 
   // Filtragem interna do Editor Base
  const linhasEditorFiltradas = linhasPlanilha.filter(item => {
@@ -197,8 +206,7 @@ const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
     // 1️⃣ REGRA NOVA: Se "a" é nova (sem id) e "b" já existe, "a" sobe pro topo
     if (!a.id && b.id) return -1;
     if (a.id && !b.id) return 1;
-
-    // ... Restante da sua ordenação original ...
+   
     if (ordenacaoEditor === 'placa') return (a.placa || '').localeCompare(b.placa || '');
     if (ordenacaoEditor === 'prioridade') {
       const peso = { 'CRÍTICA': 4, 'ALTA': 3, 'MÉDIA': 2, 'BAIXA': 1 };
