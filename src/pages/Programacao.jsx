@@ -774,7 +774,7 @@ const toggleFiltroFilial = (f) => {
         </div>
       )}
 
-       )}
+       
       {/* MODAL EXPORTAR */}
       {modalExportarAberto && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
