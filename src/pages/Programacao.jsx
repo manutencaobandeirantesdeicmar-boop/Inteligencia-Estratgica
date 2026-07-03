@@ -128,9 +128,9 @@ const Programacao = () => {
 
   const salvarLinha = async (linhaRef) => {
     const payload = { ...linhaRef };
-    if (payload.data_parada) payload.data_parada = new Date(payload.data_parada).toISOString();
-    if (payload.prazo) payload.prazo = new Date(payload.prazo).toISOString();
-    if (payload.data_final) payload.data_final = new Date(payload.data_final).toISOString();
+    payload.data_parada = payload.data_parada ? new Date(payload.data_parada).toISOString() : null;
+    payload.prazo = payload.prazo ? new Date(payload.prazo).toISOString() : null;
+    payload.data_final = payload.data_final ? new Date(payload.data_final).toISOString() : null;
 
     let error;
     if (payload.id) {
@@ -241,7 +241,14 @@ const Programacao = () => {
     return dp <= diasDaSemana[6].setHours(23,59,59,999) && df >= diasDaSemana[0].setHours(0,0,0,0);
   });
   
-  const formatDtInput = (dt) => dt ? new Date(dt).toISOString().slice(0, 16) : '';
+  const formatDtInput = (dt) => {
+    if (!dt) return '';
+    const date = new Date(dt);
+    // Subtrai o offset do fuso horário para o input exibir a hora local correta
+    const offset = date.getTimezoneOffset() * 60000;
+    const localDate = new Date(date.getTime() - offset);
+    return localDate.toISOString().slice(0, 16);
+  };
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 font-sans antialiased">
