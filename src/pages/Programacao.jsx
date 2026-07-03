@@ -86,7 +86,7 @@ const Programacao = () => {
 
       // 1. Configurações de Título
       doc.setFontSize(22);
-      doc.setTextColor(15, 76, 129); 
+      doc.setTextColor(15, 76, 129); // Azul do tema (#0f4c81)
       doc.text('Plano de Manutenção Semanal', 14, 20);
 
       // 2. Informações de Filtro 
@@ -113,7 +113,70 @@ const Programacao = () => {
         return dp <= semFim && df >= semInicio;
       });
 
-      // 4. Montar os dados da Tabela
+      // ==========================================
+      // NOVA PARTE VISUAL: GRADE SEMANAL DE MÁQUINAS
+      // ==========================================
+      // Cria o cabeçalho combinando o dia escrito (SÁB, DOM...) e a data (04/07...)
+      const colunasGrade = diasDaSemana.map((dia, idx) => {
+        const dataFormatada = `${dia.getDate()}/${(dia.getMonth() + 1).toString().padStart(2, '0')}`;
+        return `${DIAS_SEMANA[idx]}\n${dataFormatada}`;
+      });
+
+      // Mapeia os dados agrupando as placas que rodam em cada dia específico
+      const linhaGrade = diasDaSemana.map(dia => {
+        const itensNesteDia = dadosParaExportacao.filter(item => {
+          const dp = new Date(item.data_parada).setHours(0,0,0,0);
+          const df = item.data_final ? new Date(item.data_final).setHours(0,0,0,0) : (item.prazo ? new Date(item.prazo).setHours(0,0,0,0) : dp);
+          const diaAtual = dia.getTime();
+          return dp <= diaAtual && df >= diaAtual;
+        });
+
+        if (itensNesteDia.length === 0) return "Livre";
+        // Une as placas separando por quebra de linha dentro da célula
+        return itensNesteDia.map(item => item.placa).join('\n');
+      });
+
+      // Renderiza a mini grade visualizada no topo do PDF
+      autoTable(doc, {
+        startY: 38,
+        head: [colunasGrade],
+        body: [linhaGrade],
+        theme: 'grid',
+        headStyles: { 
+          fillColor: [15, 76, 129],
+          textColor: 255, 
+          fontStyle: 'bold',
+          halign: 'center',
+          fontSize: 9
+        },
+        styles: { 
+          fontSize: 9,
+          halign: 'center',
+          valign: 'middle',
+          cellPadding: 5
+        },
+        didParseCell: function (data) {
+          // Customização visual das células do corpo
+          if (data.section === 'body') {
+            if (data.cell.text[0] === 'Livre') {
+              data.cell.styles.textColor = [150, 150, 150];
+              data.cell.styles.fontStyle = 'italic';
+            } else {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.textColor = [15, 76, 129];
+              data.cell.styles.fillColor = [240, 249, 255]; // Realce em azul claro nos dias ocupados
+            }
+          }
+        }
+      });
+
+      // Descobre onde a grade terminou e adiciona o título da tabela detalhada com espaçamento seguro
+      const proximoY = doc.lastAutoTable.finalY + 12;
+      doc.setFontSize(13);
+      doc.setTextColor(15, 76, 129);
+      doc.text('Detalhamento das Operações', 14, proximoY);
+
+      // 4. Montar os dados da Tabela Detalhada (Inalterada)
       const colunas = ["Máquina", "Filial", "OS", "Tipo / Falha", "Período", "Responsável", "Observações"];
       
       const linhas = dadosParaExportacao.map(item => {
@@ -131,9 +194,9 @@ const Programacao = () => {
         ];
       });
 
-      // 5. Gerar a Tabela no PDF (AQUI ESTÁ A CORREÇÃO PRINCIPAL)
+      // 5. Gerar a Tabela Detalhada vinculada dinamicamente abaixo da parte visual
       autoTable(doc, {
-        startY: 40,
+        startY: proximoY + 4,
         head: [colunas],
         body: linhas,
         theme: 'grid',
