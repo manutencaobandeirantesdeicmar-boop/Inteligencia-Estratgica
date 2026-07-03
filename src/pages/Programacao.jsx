@@ -25,8 +25,7 @@ const Programacao = () => {
   const [abaAtiva, setAbaAtiva] = useState('dashboard'); 
   
   // Filtros Globais da Tela Principal
-  const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
-  const [ordenacao, setOrdenacao] = useState('data'); 
+const [filiaisSelecionadas, setFiliaisSelecionadas] = useState([]);  const [ordenacao, setOrdenacao] = useState('data'); 
   const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
   
   // Filtros Exclusivos do Editor Base de Dados
@@ -99,13 +98,31 @@ const Programacao = () => {
     setModalPlanilhaAberto(true);
   };
 
-  const adicionarNovaLinha = () => {
+ const adicionarNovaLinha = () => {
     const novaLinha = {
-      id: null, placa: '', os: '', filial: 'CLIA', reprogramado: 'NÃO', prioridade: 'MÉDIA',
-      data_parada: '', duracao: 'CURTA', tipo: 'PREVENTIVA', responsavel: '',
-      falha: 'MOTOR', prazo: '', data_final: '', observacoes: '', situacao: 'PROGRAMADO'
+      id: null, 
+      placa: '', 
+      os: '', 
+      filial: 'CLIA', 
+      reprogramado: 'NÃO', 
+      prioridade: 'MÉDIA',
+      data_parada: new Date().toISOString().split('T')[0], 
+      duracao: 'CURTA', 
+      tipo: 'PREVENTIVA', 
+      responsavel: '',
+      falha: 'MOTOR', 
+      prazo: '', 
+      data_final: '', 
+      observacoes: '', 
+      situacao: 'PROGRAMADO'
     };
+    
     setLinhasPlanilha([novaLinha, ...linhasPlanilha]);
+    
+    // Garante que a nova filial apareça no filtro para o usuário ver o item
+    if (!filiaisSelecionadas.includes('TODAS') && !filiaisSelecionadas.includes('CLIA')) {
+        setFiliaisSelecionadas(prev => [...prev, 'CLIA']);
+    }
   };
 
   const duplicarLinha = (linhaRef) => {
@@ -208,14 +225,24 @@ const Programacao = () => {
   // ==============================
   // FILTROS PRINCIPAIS
   // ==============================
-  const toggleFiltroFilial = (f) => {
-    if (f === 'TODAS') { setFiliaisSelecionadas(['TODAS']); return; }
-    let atualizadas = filiaisSelecionadas.filter(item => item !== 'TODAS');
-    if (atualizadas.includes(f)) { atualizadas = updatedas.filter(item => item !== f); } 
-    else { atualizadas.push(f); }
-    setFiliaisSelecionadas(atualizadas.length === 0 ? ['TODAS'] : atualizadas);
+const toggleFiltroFilial = (f) => {
+    if (f === 'TODAS') {
+      setFiliaisSelecionadas(['TODAS']);
+      return;
+    }
+    
+    setFiliaisSelecionadas(prev => {
+      const filtrado = prev.filter(item => item !== 'TODAS');
+      if (filtrado.includes(f)) {
+        const novo = filtrado.filter(item => item !== f);
+        return novo.length === 0 ? ['TODAS'] : novo;
+      } else {
+        return [...filtrado, f];
+      }
+    });
   };
 
+  // Filtragem dos Dados Gerais
   const dadosFiltradosGerais = dados.filter(i => 
     filiaisSelecionadas.includes('TODAS') || filiaisSelecionadas.includes(i.filial)
   ).sort((a, b) => {
@@ -225,6 +252,7 @@ const Programacao = () => {
     }
     return new Date(a.data_parada || 0) - new Date(b.data_parada || 0);
   });
+  
 
   // Métricas para o Dashboard Claro
   const totalGeral = dadosFiltradosGerais.length;
