@@ -301,7 +301,12 @@ const toggleFiltroFilial = (f) => {
     if(!i.data_parada) return false;
     const dp = new Date(i.data_parada).setHours(0,0,0,0);
     const df = i.data_final ? new Date(i.data_final).setHours(0,0,0,0) : (i.prazo ? new Date(i.prazo).setHours(0,0,0,0) : dp);
-    return dp <= diasDaSemana[6].setHours(23,59,59,999) && df >= diasDaSemana[0].setHours(0,0,0,0);
+    
+    // Cópia das datas para não mutar o array original diasDaSemana
+    const fimDaSemana = new Date(diasDaSemana[6]).setHours(23,59,59,999);
+    const inicioDaSemana = new Date(diasDaSemana[0]).setHours(0,0,0,0);
+
+    return dp <= fimDaSemana && df >= inicioDaSemana;
   });
   
   const formatDtInput = (dt) => {
