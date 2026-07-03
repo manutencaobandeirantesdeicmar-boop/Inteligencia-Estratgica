@@ -348,8 +348,8 @@ const [ordenacao, setOrdenacao] = useState('data'); // 👈 ADICIONE ESTA LINHA
     if (!window.confirm("⚠️ Deseja excluir este item permanentemente?")) return;
     
     if (!linhaRef.id) {
-      // Se não tem ID, é uma linha nova não salva; apenas removemos da tela
-      const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
+    // Se não tem ID, é uma linha nova não salva; apenas removemos da tela
+    const novasLinhas = linhasPlanilha.filter(l => l !== linhaRef);
       setLinhasPlanilha(novasLinhas);
       return;
       // 👈 O return é essencial aqui para ele não tentar apagar no banco
