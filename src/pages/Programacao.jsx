@@ -519,6 +519,33 @@ const Programacao = () => {
     `;
   };
 
+  const postarNoGoogleScript = (payload) => {
+    const iframeName = 'google-script-email-frame';
+    let iframe = document.querySelector(`iframe[name="${iframeName}"]`);
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.name = iframeName;
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = EMAIL_SCRIPT_URL;
+    form.target = iframeName;
+    form.style.display = 'none';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = JSON.stringify(payload);
+    form.appendChild(input);
+
+    document.body.appendChild(form);
+    form.submit();
+    window.setTimeout(() => form.remove(), 1000);
+  };
+
   const enviarEmailProgramacao = async () => {
     if (!destinatariosEmail.trim()) {
       alert('Digite pelo menos um e-mail antes de enviar.');
@@ -539,19 +566,13 @@ const Programacao = () => {
         total_os: itensDaSemana.length,
       };
 
-      const response = await fetch(EMAIL_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: new URLSearchParams({
-          payload: JSON.stringify(emailPayload),
-        }),
-      });
+      postarNoGoogleScript(emailPayload);
       setModalExportarAberto(false);
-      alert(response ? 'Solicitacao de envio encaminhada ao Google Script.' : 'Envio solicitado.');
+      alert('Solicitacao enviada ao Google Script. Confira o e-mail e o historico de execucoes do Apps Script.');
     } catch (error) {
       alert(`Erro ao enviar e-mail: ${error.message}`);
     } finally {
-      setEnviandoEmail(false);
+      window.setTimeout(() => setEnviandoEmail(false), 1200);
     }
   };
 
