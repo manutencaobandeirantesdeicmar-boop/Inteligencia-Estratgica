@@ -531,15 +531,19 @@ const Programacao = () => {
 
     setEnviandoEmail(true);
     try {
+      const emailPayload = {
+        to: destinatariosEmail,
+        subject: `Programacao de Manutencao - ${diasDaSemana[0].toLocaleDateString('pt-BR')}`,
+        html: montarConteudoEmail(),
+        unidades: filiaisSelecionadas.join(', '),
+        total_os: itensDaSemana.length,
+      };
+
       const response = await fetch(EMAIL_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        body: JSON.stringify({
-          to: destinatariosEmail,
-          subject: `Programacao de Manutencao - ${diasDaSemana[0].toLocaleDateString('pt-BR')}`,
-          html: montarConteudoEmail(),
-          unidades: filiaisSelecionadas.join(', '),
-          total_os: itensDaSemana.length,
+        body: new URLSearchParams({
+          payload: JSON.stringify(emailPayload),
         }),
       });
       setModalExportarAberto(false);
