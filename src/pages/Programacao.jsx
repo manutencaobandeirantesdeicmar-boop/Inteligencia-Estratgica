@@ -534,7 +534,6 @@ const Programacao = () => {
       const response = await fetch(EMAIL_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: destinatariosEmail,
           subject: `Programacao de Manutencao - ${diasDaSemana[0].toLocaleDateString('pt-BR')}`,
