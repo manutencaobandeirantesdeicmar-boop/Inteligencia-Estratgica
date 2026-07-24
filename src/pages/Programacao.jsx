@@ -31,7 +31,7 @@ const COLUNAS_KANBAN = ['ATRASADOS', 'PROGRAMADO', 'EM ANDAMENTO', 'AGUARDANDO P
 const DIAS_SEMANA = ['S\u00c1B', 'DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX'];
 const DURACAO = ['CURTA', 'M\u00c9DIA', 'EXTENSA'];
 const TIPOS_MANUTENCAO = ['CORRETIVA', 'CORRETIVA PROGRAMADA', 'PREVENTIVA', 'INSPE\u00c7\u00c3O E LUBRIFICA\u00c7\u00c3O', 'VERIFICAR N\u00cdVEIS', 'GERAL'];
-const FALHAS = ['ALTERNADOR', 'ANTI BALAN\u00c7O', 'AR CONDICIONADO', 'ARLA', 'BANCO', 'BATERIA', 'BICO INJETOR', 'BOMBA', 'BUZINA', 'CARRETA', 'CILINDRO', 'COOLERS', 'CORRENTE', 'C\u00c2MERA', 'DESLOCADOR', 'DIFERENCIAL', 'DIRE\u00c7\u00c3O', 'EIXO DIRECIONAL', 'EL\u00c9TRICA', 'EXTINTOR', 'FILTROS', 'FREIOS', 'HIDR\u00c1ULICO', 'ILUMINA\u00c7\u00c3O', 'INJETOR', 'JOYSTICK', 'LAN\u00c7A', 'LAVAGEM', 'LIMPADOR PARA-BRISA', 'MANGUEIRAS', 'MOTOR', 'PARA-LAMA', 'PARTIDA', 'PNEUM\u00c1TICO / BORRACHARIA', 'PROJETOS', 'QUADRO', 'RADIADOR', 'REFORMA / SOLDA', 'RODA', 'SPREADER', 'SUSPENS\u00c3O', 'TORRE', 'TRANSMISS\u00c3O', 'TURBINA', 'VAZAMENTO', '\u00d3LEO'];
+const FALHAS = ['ALTERNADOR', 'ANTI BALAN\u00c7O', 'AR CONDICIONADO', 'ARLA', 'BANCO', 'BATERIA', 'BICO INJETOR', 'BOMBA', 'BUZINA', 'CABINE', 'C\u00c2MBIO', 'CARRETA', 'CILINDRO', 'COOLERS', 'CORRENTE', 'C\u00c2MERA', 'DESLOCADOR', 'DIFERENCIAL', 'DIRE\u00c7\u00c3O', 'EIXO DIRECIONAL', 'EL\u00c9TRICA', 'EMBREAGEM', 'EXTINTOR', 'FILTROS', 'FREIOS', 'HIDR\u00c1ULICO', 'ILUMINA\u00c7\u00c3O', 'INJETOR', 'JOYSTICK', 'LAN\u00c7A', 'LAVAGEM', 'LIMPADOR PARA-BRISA', 'MANGUEIRAS', 'MOTOR', 'PARA-LAMA', 'PARTIDA', 'PNEUM\u00c1TICO / BORRACHARIA', 'PREVENTIVA', 'PROJETOS', 'QUADRO', 'RADIADOR', 'REFORMA / SOLDA', 'RODA', 'SPREADER', 'SUSPENS\u00c3O', 'TORRE', 'TRANSMISS\u00c3O', 'TURBINA', 'VAZAMENTO', '\u00d3LEO', 'ALINHAMENTO'];
 const PRIORIDADES = ['BAIXA', 'M\u00c9DIA', 'ALTA', 'CR\u00cdTICA'];
 const OPCOES_SIM_NAO = ['N\u00c3O', 'SIM'];
 const CAMPOS_DATA = ['data_parada', 'prazo', 'data_final'];
@@ -263,6 +263,13 @@ const Programacao = () => {
   const resetWeek = () => setDataBaseGantt(inicioSemanaSabado());
 
   const abrirModalPlanilha = () => {
+    setBuscaEditor('');
+    setLinhasPlanilha(dados);
+    setModalPlanilhaAberto(true);
+  };
+
+  const abrirModalPlanilhaComItem = (item) => {
+    setBuscaEditor(item?.placa || item?.os || '');
     setLinhasPlanilha(dados);
     setModalPlanilhaAberto(true);
   };
@@ -745,7 +752,10 @@ const Programacao = () => {
                                 className="absolute inset-y-2 left-2 z-10 hover:z-[100] group cursor-grab active:cursor-grabbing"
                                 style={{ width: `calc(${spanDays * 100}% + ${(spanDays - 1)}px - 16px)` }}
                               >
-                                <div className={`h-full w-full rounded-2xl shadow-md p-2 md:p-4 text-white flex items-center justify-between border-2 border-white/20 hover:brightness-110 hover:shadow-lg transition-all relative overflow-hidden ${item.reprogramado === 'SIM' ? 'bg-gradient-to-r from-red-600 to-amber-500' : 'bg-gradient-to-r from-[#0f4c81] to-[#10b981]'}`}>
+                                <div
+                                  onDoubleClick={() => abrirModalPlanilhaComItem(item)}
+                                  className={`h-full w-full rounded-2xl shadow-md p-2 md:p-4 text-white flex items-center justify-between border-2 border-white/20 hover:brightness-110 hover:shadow-lg transition-all relative overflow-hidden ${item.reprogramado === 'SIM' ? 'bg-gradient-to-r from-red-600 to-amber-500' : 'bg-gradient-to-r from-[#0f4c81] to-[#10b981]'}`}
+                                >
                                   <div className="flex flex-col truncate pr-2 md:pr-6">
                                     <div className="flex items-center gap-1 md:gap-2">
                                       <span className="font-black text-[10px] md:text-sm uppercase tracking-tighter">{item.placa}</span>
@@ -753,7 +763,28 @@ const Programacao = () => {
                                     </div>
                                     <span className="text-[9px] md:text-[11px] font-bold opacity-90 truncate italic mt-1">{item.reprogramado === 'SIM' ? 'REPROGRAMADO - ' : ''}{item.observacoes || item.tipo}</span>
                                   </div>
-                                  <div className="absolute right-1 md:right-4 opacity-40 group-hover:opacity-100"><Edit3 size={14} className="md:w-[18px] md:h-[18px]" /></div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      abrirModalPlanilhaComItem(item);
+                                    }}
+                                    onDragStart={(e) => e.preventDefault()}
+                                    className="absolute right-1 md:right-4 opacity-70 group-hover:opacity-100 hover:bg-white/20 p-1 rounded-lg transition"
+                                    title="Editar manutencao"
+                                  >
+                                    <Edit3 size={14} className="md:w-[18px] md:h-[18px]" />
+                                  </button>
+                                </div>
+                                <div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[200]">
+                                  <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">{item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}</div>
+                                  <div className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-1">
+                                    <span className="font-black text-slate-400 uppercase">Manutencao</span><span className="font-bold">{item.tipo || '-'}</span>
+                                    <span className="font-black text-slate-400 uppercase">Responsavel</span><span className="font-bold">{item.responsavel || '-'}</span>
+                                    <span className="font-black text-slate-400 uppercase">Falha</span><span className="font-bold">{item.falha || '-'}</span>
+                                    <span className="font-black text-slate-400 uppercase">OS</span><span className="font-bold">{item.os || '-'}</span>
+                                    <span className="font-black text-slate-400 uppercase">Observacoes</span><span className="font-bold whitespace-normal">{item.observacoes || '-'}</span>
+                                  </div>
                                 </div>
                               </div>
                             )}
