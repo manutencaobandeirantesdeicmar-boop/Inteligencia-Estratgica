@@ -35,7 +35,7 @@ const FALHAS = ['ALTERNADOR', 'ANTI BALAN\u00c7O', 'AR CONDICIONADO', 'ARLA', 'B
 const PRIORIDADES = ['BAIXA', 'M\u00c9DIA', 'ALTA', 'CR\u00cdTICA'];
 const OPCOES_SIM_NAO = ['N\u00c3O', 'SIM'];
 const CAMPOS_DATA = ['data_parada', 'prazo', 'data_final'];
-const EMAIL_SCRIPT_URL = import.meta.env.VITE_GOOGLE_SCRIPT_EMAIL_URL || 'https://script.google.com/a/macros/band-deicmar.com.br/s/AKfycby0udmNkKYwp_OvooNC6vN979kLB6bBz7LTPZHBgpOLcOdVBbcfaPtFS8lO-q7Zn2n47g/exec';
+const EMAIL_SCRIPT_URL = import.meta.env.VITE_GOOGLE_SCRIPT_EMAIL_URL || 'https://script.google.com/macros/s/AKfycby0udmNkKYwp_OvooNC6vN979kLB6bBz7LTPZHBgpOLcOdVBbcfaPtFS8lO-q7Zn2n47g/exec';
 
 const dataListId = (campo) => `programacao-${campo}`;
 
