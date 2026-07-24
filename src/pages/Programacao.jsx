@@ -525,7 +525,7 @@ const Programacao = () => {
       return;
     }
     if (!EMAIL_SCRIPT_URL) {
-      alert('Configure VITE_GOOGLE_SCRIPT_EMAIL_URL no ambiente com a URL do Web App do Google Apps Script.');
+      alert('https://script.google.com/a/macros/band-deicmar.com.br/s/AKfycby0udmNkKYwp_OvooNC6vN979kLB6bBz7LTPZHBgpOLcOdVBbcfaPtFS8lO-q7Zn2n47g/exec');
       return;
     }
 
