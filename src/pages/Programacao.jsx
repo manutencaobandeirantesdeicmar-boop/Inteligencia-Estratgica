@@ -420,49 +420,151 @@ const Programacao = () => {
     const doc = new jsPDF('landscape');
     const dataInicio = diasDaSemana[0]?.toLocaleDateString('pt-BR');
     const dataFim = diasDaSemana[6]?.toLocaleDateString('pt-BR');
-    doc.setFontSize(22);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const statusColor = (item) => {
+      if (checarSeAtrasado(item)) return [220, 38, 38];
+      if (item.reprogramado === 'SIM') return [245, 158, 11];
+      if (item.situacao === 'FINALIZADO') return [16, 185, 129];
+      if (item.situacao === 'EM ANDAMENTO') return [15, 76, 129];
+      if (item.situacao === 'AGUARDANDO PE\u00c7A') return [124, 58, 237];
+      return [20, 116, 173];
+    };
+
+    doc.setFillColor(15, 76, 129);
+    doc.rect(0, 0, pageWidth, 28, 'F');
+    doc.setFillColor(16, 185, 129);
+    doc.rect(pageWidth - 72, 0, 72, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(21);
+    doc.setFont(undefined, 'bold');
+    doc.text('Plano de Manutencao Semanal', 14, 17);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Periodo: ${dataInicio} a ${dataFim}`, 14, 24);
+    doc.text(`Filiais: ${filiaisSelecionadas.join(', ')}`, pageWidth - 70, 17);
+
+    const resumo = [
+      ['Total', totalGeral, [15, 76, 129]],
+      ['Atrasados', cAtrasados, [220, 38, 38]],
+      ['Programados', cProgramados, [20, 116, 173]],
+      ['Andamento', cAndamento, [245, 158, 11]],
+      ['Finalizados', cFinalizados, [16, 185, 129]],
+    ];
+    resumo.forEach(([label, valor, color], idx) => {
+      const x = 14 + (idx * 39);
+      doc.setFillColor(...color);
+      doc.roundedRect(x, 34, 33, 12, 2, 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont(undefined, 'bold');
+      doc.text(label, x + 3, 39);
+      doc.setFontSize(12);
+      doc.text(String(valor), x + 3, 44);
+    });
+
     doc.setTextColor(15, 76, 129);
-    doc.text('Plano de Manutencao Semanal', 14, 20);
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Filiais: ${filiaisSelecionadas.join(', ')}`, 14, 28);
-    doc.text(`Periodo: ${dataInicio} a ${dataFim}`, 14, 33);
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('Calendario semanal', 14, 55);
 
     autoTable(doc, {
-      startY: 38,
+      startY: 59,
       head: [DIAS_SEMANA.map((dia, idx) => `${dia}\n${diasDaSemana[idx].getDate()}/${String(diasDaSemana[idx].getMonth() + 1).padStart(2, '0')}`)],
       body: itensDaSemana.map((item) => diasDaSemana.map((dia) => {
         const inicio = parseDate(item.data_parada);
         const fim = parseDate(item.data_final || item.prazo || item.data_parada) || inicio;
         return inicio && inicio.setHours(0, 0, 0, 0) <= dia.getTime() && fim.setHours(0, 0, 0, 0) >= dia.getTime()
-          ? `${item.placa} ${item.os ? `(${item.os})` : ''}`
+          ? `${item.placa || '-'} ${item.os ? `OS ${item.os}` : ''}\nFalha: ${item.falha || '-'}`
           : '';
       })),
       theme: 'grid',
-      headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 8 },
-      styles: { fontSize: 7, cellPadding: 1, minCellHeight: 7 },
+      tableLineColor: [203, 213, 225],
+      tableLineWidth: 0.1,
+      headStyles: {
+        fillColor: [15, 76, 129],
+        textColor: 255,
+        fontStyle: 'bold',
+        halign: 'center',
+        valign: 'middle',
+        fontSize: 9,
+        cellPadding: 3,
+      },
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2,
+        minCellHeight: 13,
+        lineColor: [226, 232, 240],
+        lineWidth: 0.1,
+        valign: 'middle',
+        overflow: 'linebreak',
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.section !== 'body' || data.cell.raw === '') return;
+        const item = itensDaSemana[data.row.index];
+        const color = statusColor(item);
+        data.cell.styles.fillColor = item.reprogramado === 'SIM' ? [255, 251, 235] : [239, 246, 255];
+        data.cell.styles.textColor = color;
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.lineColor = color;
+        data.cell.styles.lineWidth = 0.35;
+      },
+      didDrawPage: () => {
+        const pageHeight = doc.internal.pageSize.getHeight();
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        doc.text('Bandeirantes Deicmar - relatorio automatico de manutencao', 14, pageHeight - 8);
+        doc.text(`Pagina ${doc.internal.getNumberOfPages()}`, pageWidth - 28, pageHeight - 8);
+      },
     });
 
     doc.addPage();
-    doc.setFontSize(16);
+    doc.setFillColor(15, 76, 129);
+    doc.rect(0, 0, pageWidth, 22, 'F');
+    doc.setFontSize(15);
     doc.setTextColor(15, 76, 129);
-    doc.text('Detalhamento das Operacoes', 14, 20);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.text('Detalhamento das Operacoes', 14, 14);
     autoTable(doc, {
-      startY: 28,
-      head: [['Maquina', 'Filial', 'OS', 'Tipo / Falha', 'Periodo', 'Responsavel', 'Status']],
+      startY: 30,
+      head: [['Maquina', 'Filial', 'OS', 'Tipo', 'Falha', 'Periodo', 'Responsavel', 'Status']],
       body: itensDaSemana.map((item) => [
         item.placa,
         item.filial,
         item.os || '-',
-        `${item.tipo}\nFalha: ${item.falha}`,
+        item.tipo || '-',
+        item.falha || '-',
         `Inicio: ${formatarDataHoraBR(item.data_parada)}\nFim: ${formatarDataHoraBR(item.data_final || item.prazo)}`,
         item.responsavel || '-',
         `${situacaoVisual(item)}${item.reprogramado === 'SIM' ? '\nREPROGRAMADO' : ''}`,
       ]),
       theme: 'grid',
-      headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 10 },
-      styles: { fontSize: 9, valign: 'middle', cellPadding: 3 },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
+      headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 9, cellPadding: 3 },
+      styles: { fontSize: 8.5, valign: 'middle', cellPadding: 3, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { fontStyle: 'bold', textColor: [15, 76, 129], cellWidth: 28 },
+        1: { halign: 'center', cellWidth: 18 },
+        2: { halign: 'center', cellWidth: 24 },
+        3: { cellWidth: 42 },
+        4: { cellWidth: 42 },
+        5: { cellWidth: 45 },
+        6: { cellWidth: 34 },
+        7: { cellWidth: 34, fontStyle: 'bold' },
+      },
+      didParseCell: (data) => {
+        if (data.section !== 'body' || data.column.index !== 7) return;
+        const item = itensDaSemana[data.row.index];
+        data.cell.styles.textColor = statusColor(item);
+      },
+      didDrawPage: () => {
+        const pageHeight = doc.internal.pageSize.getHeight();
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        doc.text('Bandeirantes Deicmar - relatorio automatico de manutencao', 14, pageHeight - 8);
+        doc.text(`Pagina ${doc.internal.getNumberOfPages()}`, pageWidth - 28, pageHeight - 8);
+      },
     });
     doc.save(`Plano_Manutencao_${dataInicio.replace(/\//g, '-')}.pdf`);
   };
