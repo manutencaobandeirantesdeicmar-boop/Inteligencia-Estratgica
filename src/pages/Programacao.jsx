@@ -97,6 +97,12 @@ const checarSeAtrasado = (item) => {
 
 const situacaoVisual = (item) => (checarSeAtrasado(item) ? 'ATRASADOS' : item.situacao || 'PROGRAMADO');
 
+const normalizarSituacaoPorDatas = (item) => {
+  if (parseDate(item?.data_final)) return { ...item, situacao: 'FINALIZADO' };
+  if (checarSeAtrasado(item)) return { ...item, situacao: 'ATRASADOS' };
+  return item;
+};
+
 const buildLinhaVazia = () => ({
   id: null,
   placa: '',
@@ -162,11 +168,13 @@ const Programacao = () => {
     return [...new Set([...equipamentos, ...placasDados].map(normalizarTexto).filter(Boolean))].sort();
   }, [dados, equipamentos]);
 
-  const atualizarAtrasadosNoBanco = async (registros) => {
-    const atrasados = registros.filter((item) => checarSeAtrasado(item) && item.situacao !== 'ATRASADOS');
-    if (!atrasados.length) return;
-    await Promise.all(atrasados.map((item) => (
-      supabase.from('programacao').update({ situacao: 'ATRASADOS' }).eq('id', item.id)
+  const atualizarSituacoesAutomaticasNoBanco = async (registros) => {
+    const desatualizados = registros
+      .map((item) => ({ item, normalizado: normalizarSituacaoPorDatas(item) }))
+      .filter(({ item, normalizado }) => item.situacao !== normalizado.situacao);
+    if (!desatualizados.length) return;
+    await Promise.all(desatualizados.map(({ item, normalizado }) => (
+      supabase.from('programacao').update({ situacao: normalizado.situacao }).eq('id', item.id)
     )));
   };
 
@@ -175,10 +183,10 @@ const Programacao = () => {
     const { data, error } = await supabase.from('programacao').select('*').order('data_parada', { ascending: true });
     if (!error) {
       const registros = data || [];
-      const normalizados = registros.map((item) => checarSeAtrasado(item) ? { ...item, situacao: 'ATRASADOS' } : item);
+      const normalizados = registros.map(normalizarSituacaoPorDatas);
       setDados(normalizados);
       setLinhasPlanilha(normalizados);
-      atualizarAtrasadosNoBanco(registros);
+      atualizarSituacoesAutomaticasNoBanco(registros);
     } else {
       alert(`Erro ao carregar programacao: ${error.message}`);
     }
@@ -291,6 +299,9 @@ const Programacao = () => {
       if (CAMPOS_DATA.includes(campo) && linha.id && !mesmaDataBase(linha[campo], valor)) {
         novaLinha.reprogramado = 'SIM';
       }
+      if (campo === 'data_final') {
+        novaLinha.situacao = parseDate(valor) ? 'FINALIZADO' : (linha.situacao === 'FINALIZADO' ? 'PROGRAMADO' : linha.situacao);
+      }
       return novaLinha;
     }));
   };
@@ -310,8 +321,7 @@ const Programacao = () => {
       prazo: toIsoOrNull(linha.prazo),
       data_final: toIsoOrNull(linha.data_final),
     };
-    if (payload.situacao !== 'FINALIZADO' && checarSeAtrasado(payload)) payload.situacao = 'ATRASADOS';
-    return payload;
+    return normalizarSituacaoPorDatas(payload);
   };
 
   const salvarLinha = async (linhaRef, silencioso = false) => {
@@ -409,7 +419,7 @@ const Programacao = () => {
       prazo: deslocarData(item.prazo, diffMs),
       data_final: item.data_final ? deslocarData(item.data_final, diffMs) : item.data_final,
       reprogramado: 'SIM',
-      situacao: item.situacao === 'FINALIZADO' ? 'FINALIZADO' : 'PROGRAMADO',
+      situacao: item.data_final || item.situacao === 'FINALIZADO' ? 'FINALIZADO' : 'PROGRAMADO',
     };
     const { error } = await supabase.from('programacao').update(payload).eq('id', id);
     if (!error) fetchProgramacao();
@@ -528,7 +538,7 @@ const Programacao = () => {
     doc.text('Detalhamento das Operacoes', 14, 14);
     autoTable(doc, {
       startY: 30,
-      head: [['Maquina', 'Filial', 'OS', 'Tipo', 'Falha', 'Periodo', 'Responsavel', 'Status']],
+      head: [['Maquina', 'Filial', 'OS', 'Tipo', 'Falha', 'Periodo', 'Responsavel', 'Status', 'Observacoes']],
       body: itensDaSemana.map((item) => [
         item.placa,
         item.filial,
@@ -538,20 +548,22 @@ const Programacao = () => {
         `Inicio: ${formatarDataHoraBR(item.data_parada)}\nFim: ${formatarDataHoraBR(item.data_final || item.prazo)}`,
         item.responsavel || '-',
         `${situacaoVisual(item)}${item.reprogramado === 'SIM' ? '\nREPROGRAMADO' : ''}`,
+        item.observacoes || '-',
       ]),
       theme: 'grid',
       headStyles: { fillColor: [15, 76, 129], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 9, cellPadding: 3 },
       styles: { fontSize: 8.5, valign: 'middle', cellPadding: 3, lineColor: [226, 232, 240], lineWidth: 0.1 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
-        0: { fontStyle: 'bold', textColor: [15, 76, 129], cellWidth: 28 },
-        1: { halign: 'center', cellWidth: 18 },
-        2: { halign: 'center', cellWidth: 24 },
-        3: { cellWidth: 42 },
-        4: { cellWidth: 42 },
-        5: { cellWidth: 45 },
-        6: { cellWidth: 34 },
-        7: { cellWidth: 34, fontStyle: 'bold' },
+        0: { fontStyle: 'bold', textColor: [15, 76, 129], cellWidth: 24 },
+        1: { halign: 'center', cellWidth: 16 },
+        2: { halign: 'center', cellWidth: 20 },
+        3: { cellWidth: 34 },
+        4: { cellWidth: 34 },
+        5: { cellWidth: 40 },
+        6: { cellWidth: 30 },
+        7: { cellWidth: 30, fontStyle: 'bold' },
+        8: { cellWidth: 48 },
       },
       didParseCell: (data) => {
         if (data.section !== 'body' || data.column.index !== 7) return;
