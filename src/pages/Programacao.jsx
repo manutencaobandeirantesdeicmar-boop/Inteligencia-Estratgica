@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -29,6 +29,10 @@ import { supabase } from '../services/supabase-config';
 const FILIAIS = ['CLIA', 'IPA', 'BK', 'HUB', 'FROTA'];
 const COLUNAS_KANBAN = ['ATRASADOS', 'PROGRAMADO', 'EM ANDAMENTO', 'AGUARDANDO PE\u00c7A', 'FINALIZADO'];
 const DIAS_SEMANA = ['S\u00c1B', 'DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX'];
+const DIAS_GANTT = 21;
+const LARGURA_DIA_GANTT = 160;
+const BORDA_AUTO_SCROLL_GANTT = 90;
+const PASSO_AUTO_SCROLL_GANTT = 32;
 const DURACAO = ['CURTA', 'M\u00c9DIA', 'EXTENSA'];
 const TIPOS_MANUTENCAO = ['CORRETIVA', 'CORRETIVA PROGRAMADA', 'PREVENTIVA', 'INSPE\u00c7\u00c3O E LUBRIFICA\u00c7\u00c3O', 'VERIFICAR N\u00cdVEIS', 'GERAL'];
 const FALHAS = ['ALTERNADOR', 'ANTI BALAN\u00c7O', 'AR CONDICIONADO', 'ARLA', 'BANCO', 'BATERIA', 'BICO INJETOR', 'BOMBA', 'BUZINA', 'CABINE', 'C\u00c2MBIO', 'CARRETA', 'CILINDRO', 'COOLERS', 'CORRENTE', 'C\u00c2MERA', 'DESLOCADOR', 'DIFERENCIAL', 'DIRE\u00c7\u00c3O', 'EIXO DIRECIONAL', 'EL\u00c9TRICA', 'EMBREAGEM', 'EXTINTOR', 'FILTROS', 'FREIOS', 'HIDR\u00c1ULICO', 'ILUMINA\u00c7\u00c3O', 'INJETOR', 'JOYSTICK', 'LAN\u00c7A', 'LAVAGEM', 'LIMPADOR PARA-BRISA', 'MANGUEIRAS', 'MOTOR', 'PARA-LAMA', 'PARTIDA', 'PNEUM\u00c1TICO / BORRACHARIA', 'PREVENTIVA', 'PROJETOS', 'QUADRO', 'RADIADOR', 'REFORMA / SOLDA', 'RODA', 'SPREADER', 'SUSPENS\u00c3O', 'TORRE', 'TRANSMISS\u00c3O', 'TURBINA', 'VAZAMENTO', '\u00d3LEO', 'ALINHAMENTO'];
@@ -138,6 +142,7 @@ const DatalistInput = ({ campo, value, options, onChange, className, placeholder
 
 const Programacao = () => {
   const navigate = useNavigate();
+  const ganttScrollRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState([]);
   const [equipamentos, setEquipamentos] = useState([]);
@@ -162,6 +167,13 @@ const Programacao = () => {
     d.setHours(0, 0, 0, 0);
     return d;
   }), [dataBaseGantt]);
+
+  const diasGantt = useMemo(() => Array.from({ length: DIAS_GANTT }).map((_, i) => {
+  const d = new Date(dataBaseGantt);
+  d.setDate(dataBaseGantt.getDate() + i);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}), [dataBaseGantt]);
 
   const opcoesPlaca = useMemo(() => {
     const placasDados = dados.map((item) => item.placa).filter(Boolean);
@@ -247,6 +259,15 @@ const Programacao = () => {
     const fimSemana = new Date(diasDaSemana[6]).setHours(23, 59, 59, 999);
     return inicio.getTime() <= fimSemana && fim.getTime() >= inicioSemana;
   }), [dadosFiltradosGerais, diasDaSemana]);
+
+  const itensGantt = useMemo(() => dadosFiltradosGerais.filter((item) => {
+  const inicio = parseDate(item.data_parada);
+  if (!inicio) return false;
+  const fim = parseDate(item.data_final || item.prazo || item.data_parada) || inicio;
+  const inicioPeriodo = new Date(diasGantt[0]).setHours(0, 0, 0, 0);
+  const fimPeriodo = new Date(diasGantt[diasGantt.length - 1]).setHours(23, 59, 59, 999);
+  return inicio.getTime() <= fimPeriodo && fim.getTime() >= inicioPeriodo;
+}), [dadosFiltradosGerais, diasGantt]);
 
   const linhasEditorFiltradas = useMemo(() => linhasPlanilha
     .filter((item) => {
@@ -399,6 +420,24 @@ const Programacao = () => {
     const data = parseDate(valor);
     return data ? new Date(data.getTime() + diffMs).toISOString() : valor;
   };
+
+  const onDragStartGantt = (e, item) => {
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('gantt-id', item.id);
+};
+
+const handleDragOverGantt = (e) => {
+  e.preventDefault();
+  const container = ganttScrollRef.current;
+  if (!container) return;
+
+  const { left, right } = container.getBoundingClientRect();
+  if (e.clientX > right - BORDA_AUTO_SCROLL_GANTT) {
+    container.scrollLeft += PASSO_AUTO_SCROLL_GANTT;
+  } else if (e.clientX < left + BORDA_AUTO_SCROLL_GANTT) {
+    container.scrollLeft -= PASSO_AUTO_SCROLL_GANTT;
+  }
+};
 
   const onDropGantt = async (e, diaDestino) => {
     e.preventDefault();
@@ -854,41 +893,41 @@ const Programacao = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto overflow-y-auto max-h-[65vh] pb-32">
-              <table className="w-full text-sm border-collapse min-w-[800px]">
+           <div ref={ganttScrollRef} onDragOver={handleDragOverGantt} className="overflow-x-auto overflow-y-auto max-h-[65vh] pb-32">
+            <table className="text-sm border-collapse" style={{ minWidth: `${diasGantt.length * LARGURA_DIA_GANTT}px` }}>
                 <thead className="sticky top-0 z-[70]">
                   <tr className="bg-slate-100/95 backdrop-blur-md shadow-sm border-b border-slate-200">
-                    {diasDaSemana.map((dia, idx) => (
-                      <th key={idx} className="p-4 text-center border-r border-slate-200/60 w-[14.28%]">
-                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">{DIAS_SEMANA[idx]}</span>
+                   {diasGantt.map((dia, idx) => (
+                   <th key={idx} className="p-4 text-center border-r border-slate-200/60" style={{ width: `${LARGURA_DIA_GANTT}px` }}>
+                    <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">{DIAS_SEMANA[idx % 7]}</span>
                         <span className={`text-base md:text-xl font-black ${dia.toDateString() === new Date().toDateString() ? 'text-[#10b981] bg-emerald-100/50 px-2 rounded-lg' : 'text-[#0f4c81]'}`}>{dia.getDate()}</span>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 relative">
-                  {itensDaSemana.map((item) => {
+                  {itensGantt.map((item) => {
                     const dataParada = parseDate(item.data_parada);
                     const dataFimReal = parseDate(item.data_final || item.prazo || item.data_parada) || dataParada;
                     if (!dataParada || !dataFimReal) return null;
                     dataParada.setHours(0, 0, 0, 0);
                     dataFimReal.setHours(0, 0, 0, 0);
-                    let startIdx = diasDaSemana.findIndex((d) => d.getTime() === dataParada.getTime());
-                    if (startIdx === -1 && dataParada < diasDaSemana[0]) startIdx = 0;
-                    let endIdx = diasDaSemana.findIndex((d) => d.getTime() === dataFimReal.getTime());
-                    if (endIdx === -1 && dataFimReal > diasDaSemana[6]) endIdx = 6;
+                   let startIdx = diasGantt.findIndex((d) => d.getTime() === dataParada.getTime());
+                    if (startIdx === -1 && dataParada < diasGantt[0]) startIdx = 0;
+                    let endIdx = diasGantt.findIndex((d) => d.getTime() === dataFimReal.getTime());
+                    if (endIdx === -1 && dataFimReal > diasGantt[diasGantt.length - 1]) endIdx = diasGantt.length - 1;
                     const spanDays = Math.max((endIdx - startIdx) + 1, 1);
 
                     return (
                       <tr key={item.id} className="h-20 relative hover:z-[100] transition-colors">
-                        {diasDaSemana.map((dia, colIdx) => (
-                          <td key={colIdx} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDropGantt(e, dia)} className="border-r border-slate-100/50 relative">
+                        {diasGantt.map((dia, colIdx) => (
+                        <td key={colIdx} onDragOver={handleDragOverGantt} onDrop={(e) => onDropGantt(e, dia)} className="border-r border-slate-100/50 relative" style={{ width: `${LARGURA_DIA_GANTT}px` }}>
                             {startIdx === colIdx && (
                               <div
                                 draggable
-                                onDragStart={(e) => e.dataTransfer.setData('gantt-id', item.id)}
+                               onDragStart={(e) => onDragStartGantt(e, item)}
                                 className="absolute inset-y-2 left-2 z-10 hover:z-[100] group cursor-grab active:cursor-grabbing"
-                                style={{ width: `calc(${spanDays * 100}% + ${(spanDays - 1)}px - 16px)` }}
+                                style={{ width: `${(spanDays * LARGURA_DIA_GANTT) - 16}px` }}
                               >
                                 <div
                                   onDoubleClick={() => abrirModalPlanilhaComItem(item)}
