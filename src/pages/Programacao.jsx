@@ -908,7 +908,7 @@ const handleDragOverGantt = (e) => {
                           draggable
                           onDragStart={(e) => onDragStartKanban(e, item)}
                           onClick={abrirModalPlanilha}
-                          className={`p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 ${checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
+                          className={`relative group p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 ${checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
                         >
                           <div className="flex justify-between items-start mb-1">
                             <h4 className="font-black text-slate-700 text-base">{item.placa}</h4>
@@ -920,6 +920,38 @@ const handleDragOverGantt = (e) => {
                             <span className="truncate">Resp: <strong className="text-slate-600">{item.responsavel || '-'}</strong></span>
                             <span className="font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0 border border-slate-200/60">{item.filial}</span>
                           </div>
+                          <div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[200]">
+                          <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">
+                            {item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}
+                          </div>
+                        
+                          <div className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-1">
+                            <span className="font-black text-slate-400 uppercase">Manutencao</span>
+                            <span className="font-bold">{item.tipo || '-'}</span>
+                        
+                            <span className="font-black text-slate-400 uppercase">Responsavel</span>
+                            <span className="font-bold">{item.responsavel || '-'}</span>
+                        
+                            <span className="font-black text-slate-400 uppercase">Falha</span>
+                            <span className="font-bold">{item.falha || '-'}</span>
+                        
+                            <span className="font-black text-slate-400 uppercase">OS</span>
+                            <span className="font-bold">{item.os || '-'}</span>
+                        
+                            <span className="font-black text-slate-400 uppercase">Inicio</span>
+                            <span className="font-bold">{formatarDataHoraBR(item.data_parada)}</span>
+                        
+                            <span className="font-black text-slate-400 uppercase">Prazo</span>
+                            <span className="font-bold">{formatarDataHoraBR(item.prazo)}</span>
+                        
+                            <span className="font-black text-slate-400 uppercase">Fim</span>
+                            <span className="font-bold">{formatarDataHoraBR(item.data_final)}</span>
+                        
+                            <span className="font-black text-slate-400 uppercase">Observacoes</span>
+                            <span className="font-bold whitespace-normal">{item.observacoes || '-'}</span>
+                          </div>
+                        </div>
+                          
                         </div>
                       ))}
                       {!itens.length && <p className="text-[11px] text-slate-400 font-bold italic p-4 mx-auto">Nenhuma programacao cadastrada.</p>}
