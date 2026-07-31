@@ -156,6 +156,9 @@ const Programacao = () => {
   const [dataBaseGantt, setDataBaseGantt] = useState(() => inicioSemanaSabado());
   const [modalExportarAberto, setModalExportarAberto] = useState(false);
   const [modalPlanilhaAberto, setModalPlanilhaAberto] = useState(false);
+  const [modalNovaManutencaoAberto, setModalNovaManutencaoAberto] = useState(false);
+  const [novaManutencao, setNovaManutencao] = useState(() => buildLinhaVazia());
+  const [salvandoNovaManutencao, setSalvandoNovaManutencao] = useState(false);
   const [destinatariosEmail, setDestinatariosEmail] = useState('');
   const [linhasPlanilha, setLinhasPlanilha] = useState([]);
   const [salvandoTudo, setSalvandoTudo] = useState(false);
@@ -298,11 +301,16 @@ const Programacao = () => {
   };
 
   const abrirModalPlanilhaComItem = (item) => {
-    setBuscaEditor(item?.placa || item?.os || '');
-    setLinhasPlanilha(dados);
-    setModalPlanilhaAberto(true);
+  setBuscaEditor(item?.placa || item?.os || '');
+  setLinhasPlanilha(dados);
+  setModalPlanilhaAberto(true);
   };
-
+  
+  const abrirModalNovaManutencao = () => {
+    setNovaManutencao(buildLinhaVazia());
+    setModalNovaManutencaoAberto(true);
+  };
+  
   const adicionarNovaLinha = () => setLinhasPlanilha((prev) => [buildLinhaVazia(), ...prev]);
 
   const duplicarLinha = (linhaRef) => {
@@ -325,6 +333,16 @@ const Programacao = () => {
       }
       return novaLinha;
     }));
+  };
+
+  const atualizarNovaManutencao = (campo, valor) => {
+    setNovaManutencao((prev) => {
+      const novaLinha = { ...prev, [campo]: campo === 'placa' ? normalizarTexto(valor) : valor };
+      if (campo === 'data_final') {
+        novaLinha.situacao = parseDate(valor) ? 'FINALIZADO' : (prev.situacao === 'FINALIZADO' ? 'PROGRAMADO' : prev.situacao);
+      }
+      return novaLinha;
+    });
   };
 
   const montarPayload = (linha) => {
@@ -367,6 +385,30 @@ const Programacao = () => {
     return { error };
   };
 
+  const salvarNovaManutencao = async () => {
+  const payload = montarPayload(novaManutencao);
+  if (!payload.placa) {
+    alert('Informe a Placa / Tag antes de salvar.');
+    return;
+  }
+
+  setSalvandoNovaManutencao(true);
+  const { id, created_at, ...dadosInsert } = payload;
+  const { error } = await supabase.from('programacao').insert([dadosInsert]);
+  setSalvandoNovaManutencao(false);
+
+  if (error) {
+    alert(`Erro ao criar manutencao: ${error.message}`);
+    return;
+  }
+
+  setModalNovaManutencaoAberto(false);
+  setNovaManutencao(buildLinhaVazia());
+  await fetchProgramacao();
+  alert('Manutencao criada com sucesso!');
+};
+
+  
   const salvarTudo = async () => {
     setSalvandoTudo(true);
     const linhas = [...linhasPlanilha];
@@ -882,7 +924,7 @@ const handleDragOverGantt = (e) => {
 
         {!loading && abaAtiva === 'cronograma' && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-white overflow-visible flex flex-col">
-            <div className="flex justify-between items-center p-4 bg-slate-50 rounded-t-[2rem] border-b border-slate-100">
+            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 p-4 bg-slate-50 rounded-t-[2rem] border-b border-slate-100">
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
                 <h2 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm ml-0 sm:ml-4">Gantt Visual</h2>
                 <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
@@ -891,6 +933,16 @@ const handleDragOverGantt = (e) => {
                   <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500" title="Proxima semana"><RightIcon size={18} /></button>
                 </div>
               </div>
+            
+              <button
+                type="button"
+                onClick={abrirModalNovaManutencao}
+                className="bg-[#0f4c81] text-white hover:bg-[#0b3b65] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition"
+                title="Adicionar nova manutencao"
+              >
+                <PlusCircle size={16} /> Nova manutencao
+              </button>
+            </div>
             </div>
 
            <div ref={ganttScrollRef} onDragOver={handleDragOverGantt} className="overflow-x-auto overflow-y-auto max-h-[65vh] pb-32">
@@ -1064,6 +1116,101 @@ const handleDragOverGantt = (e) => {
           </div>
         </div>
       )}
+
+      {modalNovaManutencaoAberto && (
+  <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 md:p-4">
+    <div className="bg-white w-full h-full md:h-auto md:max-h-[92vh] md:max-w-5xl rounded-none md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-4 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 shrink-0 text-white shadow-md">
+        <div>
+          <h2 className="font-black text-sm uppercase tracking-widest flex items-center gap-2"><PlusCircle size={18} /> Nova manutencao</h2>
+          <p className="text-[11px] text-white/75 font-bold mt-1">Atalho do Gantt com os mesmos campos do editor base de dados.</p>
+        </div>
+        <button onClick={() => setModalNovaManutencaoAberto(false)} className="hover:bg-white/20 p-2 rounded-lg text-white transition self-end sm:self-auto" title="Fechar"><X size={18} /></button>
+      </div>
+
+      <div className="overflow-y-auto p-4 md:p-6 bg-slate-100">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Placa / Tag</span>
+            <DatalistInput campo="nova-placa" value={novaManutencao.placa} options={opcoesPlaca} onChange={(valor) => atualizarNovaManutencao('placa', valor)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-black uppercase text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">OS</span>
+            <input type="text" value={novaManutencao.os || ''} onChange={(e) => atualizarNovaManutencao('os', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Filial</span>
+            <DatalistInput campo="nova-filial" value={novaManutencao.filial} options={FILIAIS} onChange={(valor) => atualizarNovaManutencao('filial', normalizarTexto(valor))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Situacao</span>
+            <DatalistInput campo="nova-situacao" value={novaManutencao.situacao} options={COLUNAS_KANBAN} onChange={(valor) => atualizarNovaManutencao('situacao', normalizarTexto(valor))} className="w-full px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-xs font-bold outline-none focus:border-amber-400" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Prioridade</span>
+            <DatalistInput campo="nova-prioridade" value={novaManutencao.prioridade} options={PRIORIDADES} onChange={(valor) => atualizarNovaManutencao('prioridade', normalizarTexto(valor))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Manutencao</span>
+            <DatalistInput campo="nova-tipo" value={novaManutencao.tipo} options={TIPOS_MANUTENCAO} onChange={(valor) => atualizarNovaManutencao('tipo', normalizarTexto(valor))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Falha</span>
+            <DatalistInput campo="nova-falha" value={novaManutencao.falha} options={FALHAS} onChange={(valor) => atualizarNovaManutencao('falha', normalizarTexto(valor))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Duracao</span>
+            <DatalistInput campo="nova-duracao" value={novaManutencao.duracao} options={DURACAO} onChange={(valor) => atualizarNovaManutencao('duracao', normalizarTexto(valor))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Reprogramado</span>
+            <DatalistInput campo="nova-reprogramado" value={novaManutencao.reprogramado || 'NÃO'} options={OPCOES_SIM_NAO} onChange={(valor) => atualizarNovaManutencao('reprogramado', normalizarTexto(valor))} className={`w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none ${novaManutencao.reprogramado === 'SIM' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200 text-slate-700'}`} />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Responsavel</span>
+            <input type="text" value={novaManutencao.responsavel || ''} onChange={(e) => atualizarNovaManutencao('responsavel', normalizarTexto(e.target.value))} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Inicio</span>
+            <input type="datetime-local" value={formatDtInput(novaManutencao.data_parada)} onChange={(e) => atualizarNovaManutencao('data_parada', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Prazo</span>
+            <input type="datetime-local" value={formatDtInput(novaManutencao.prazo)} onChange={(e) => atualizarNovaManutencao('prazo', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-[#0f4c81]" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Fim</span>
+            <input type="datetime-local" value={formatDtInput(novaManutencao.data_final)} onChange={(e) => atualizarNovaManutencao('data_final', e.target.value)} className="w-full px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-700 outline-none focus:border-emerald-400" />
+          </label>
+        </div>
+
+        <label className="block space-y-1 mt-4">
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Observacoes</span>
+          <textarea rows="4" value={novaManutencao.observacoes || ''} onChange={(e) => atualizarNovaManutencao('observacoes', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs resize-none outline-none focus:border-[#0f4c81]" />
+        </label>
+      </div>
+
+      <div className="p-4 bg-white border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
+        <button onClick={() => setModalNovaManutencaoAberto(false)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border border-slate-200 text-slate-500 hover:bg-slate-50 transition">Cancelar</button>
+        <button onClick={salvarNovaManutencao} disabled={salvandoNovaManutencao} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#0f4c81] text-white hover:bg-[#0b3b65] disabled:opacity-60 transition flex items-center justify-center gap-2">
+          <Save size={16} /> {salvandoNovaManutencao ? 'Salvando...' : 'Salvar manutencao'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {modalExportarAberto && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
