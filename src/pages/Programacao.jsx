@@ -923,30 +923,58 @@ const handleDragOverGantt = (e) => {
         )}
 
         {!loading && abaAtiva === 'cronograma' && (
-          <div className="bg-white rounded-[2rem] shadow-xl border border-white overflow-visible flex flex-col">
-            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 p-4 bg-slate-50 rounded-t-[2rem] border-b border-slate-100">
-              <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-                <h2 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm ml-0 sm:ml-4">Gantt Visual</h2>
-                <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
-                  <button onClick={prevWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500" title="Semana anterior"><LeftIcon size={18} /></button>
-                  <button onClick={resetWeek} className="px-2 md:px-4 font-bold text-[10px] md:text-xs uppercase text-[#0f4c81] hover:bg-slate-50 transition">Hoje</button>
-                  <button onClick={nextWeek} className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500" title="Proxima semana"><RightIcon size={18} /></button>
-                </div>
+        <div className="bg-white rounded-[2rem] shadow-xl border border-white overflow-visible flex flex-col">
+          <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 p-4 bg-slate-50 rounded-t-[2rem] border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+              <h2 className="font-black text-[#0f4c81] uppercase tracking-widest text-sm ml-0 sm:ml-4">
+                Gantt Visual
+              </h2>
+      
+              <div className="flex bg-white rounded-lg shadow-sm border border-slate-200 p-1">
+                <button
+                  onClick={prevWeek}
+                  className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"
+                  title="Semana anterior"
+                >
+                  <LeftIcon size={18} />
+                </button>
+      
+                <button
+                  onClick={resetWeek}
+                  className="px-2 md:px-4 font-bold text-[10px] md:text-xs uppercase text-[#0f4c81] hover:bg-slate-50 transition"
+                >
+                  Hoje
+                </button>
+      
+                <button
+                  onClick={nextWeek}
+                  className="p-2 hover:bg-slate-100 rounded-md transition text-slate-500"
+                  title="Proxima semana"
+                >
+                  <RightIcon size={18} />
+                </button>
               </div>
-            
-              <button
-                type="button"
-                onClick={abrirModalNovaManutencao}
-                className="bg-[#0f4c81] text-white hover:bg-[#0b3b65] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition"
-                title="Adicionar nova manutencao"
-              >
-                <PlusCircle size={16} /> Nova manutencao
-              </button>
             </div>
-            </div>
-
-           <div ref={ganttScrollRef} onDragOver={handleDragOverGantt} className="overflow-x-auto overflow-y-auto max-h-[65vh] pb-32">
-            <table className="text-sm border-collapse" style={{ minWidth: `${diasGantt.length * LARGURA_DIA_GANTT}px` }}>
+      
+            <button
+              type="button"
+              onClick={abrirModalNovaManutencao}
+              className="bg-[#0f4c81] text-white hover:bg-[#0b3b65] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition"
+              title="Adicionar nova manutencao"
+            >
+              <PlusCircle size={16} /> Nova manutencao
+            </button>
+          </div>
+      
+          <div
+            ref={ganttScrollRef}
+            onDragOver={handleDragOverGantt}
+            className="overflow-x-auto overflow-y-auto max-h-[65vh] pb-32"
+          >
+            <table
+              className="text-sm border-collapse"
+              style={{ minWidth: `${diasGantt.length * LARGURA_DIA_GANTT}px` }}
+            >
                 <thead className="sticky top-0 z-[70]">
                   <tr className="bg-slate-100/95 backdrop-blur-md shadow-sm border-b border-slate-200">
                    {diasGantt.map((dia, idx) => (
