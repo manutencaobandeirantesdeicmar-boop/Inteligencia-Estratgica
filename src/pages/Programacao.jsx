@@ -306,10 +306,19 @@ const Programacao = () => {
   setModalPlanilhaAberto(true);
   };
   
-  const abrirModalNovaManutencao = () => {
-    setNovaManutencao(buildLinhaVazia());
-    setModalNovaManutencaoAberto(true);
-  };
+  const abrirModalNovaManutencao = (diaSelecionado = null) => {
+  const linha = buildLinhaVazia();
+
+  if (diaSelecionado) {
+    const data = new Date(diaSelecionado);
+    data.setHours(8, 0, 0, 0);
+    linha.data_parada = data.toISOString();
+    linha.prazo = data.toISOString();
+  }
+
+  setNovaManutencao(linha);
+  setModalNovaManutencaoAberto(true);
+};
   
   const adicionarNovaLinha = () => setLinhasPlanilha((prev) => [buildLinhaVazia(), ...prev]);
 
@@ -955,15 +964,6 @@ const handleDragOverGantt = (e) => {
                 </button>
               </div>
             </div>
-      
-            <button
-              type="button"
-              onClick={abrirModalNovaManutencao}
-              className="bg-[#0f4c81] text-white hover:bg-[#0b3b65] px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition"
-              title="Adicionar nova manutencao"
-            >
-              <PlusCircle size={16} /> Nova manutencao
-            </button>
           </div>
       
           <div
@@ -1001,12 +1001,13 @@ const handleDragOverGantt = (e) => {
                     return (
                       <tr key={item.id} className="h-20 relative hover:z-[100] transition-colors">
                         {diasGantt.map((dia, colIdx) => (
-                        <td key={colIdx} onDragOver={handleDragOverGantt} onDrop={(e) => onDropGantt(e, dia)} className="border-r border-slate-100/50 relative" style={{ width: `${LARGURA_DIA_GANTT}px` }}>
+                        <td key={colIdx} onClick={() => abrirModalNovaManutencao(dia)} onDragOver={handleDragOverGantt} onDrop={(e) => onDropGantt(e, dia)} className="border-r border-slate-100/50 relative cursor-pointer hover:bg-blue-50/50 transition-colors" style={{ width: `${LARGURA_DIA_GANTT}px` }} title="Clique para adicionar manutencao neste dia" >
                             {startIdx === colIdx && (
                               <div
-                                draggable
-                               onDragStart={(e) => onDragStartGantt(e, item)}
-                                className="absolute inset-y-2 left-2 z-10 hover:z-[100] group cursor-grab active:cursor-grabbing"
+                              draggable
+                              onClick={(e) => e.stopPropagation()}
+                              onDragStart={(e) => onDragStartGantt(e, item)}
+                              className="absolute inset-y-2 left-2 z-10 hover:z-[100] group cursor-grab active:cursor-grabbing"
                                 style={{ width: `${(spanDays * LARGURA_DIA_GANTT) - 16}px` }}
                               >
                                 <div
