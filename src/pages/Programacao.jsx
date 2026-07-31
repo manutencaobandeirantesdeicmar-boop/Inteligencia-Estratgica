@@ -943,8 +943,7 @@ const handleDragOverGantt = (e) => {
                             <span className="truncate">Resp: <strong className="text-slate-600">{item.responsavel || '-'}</strong></span>
                             <span className="font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0 border border-slate-200/60">{item.filial}</span>
                           </div>
-                          <div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[200]">
-                          <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">
+                          <div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]">                          <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">
                             {item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}
                           </div>
                         
