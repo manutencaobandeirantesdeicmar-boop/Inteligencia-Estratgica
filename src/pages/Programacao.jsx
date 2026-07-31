@@ -101,6 +101,18 @@ const checarSeAtrasado = (item) => {
 
 const situacaoVisual = (item) => (checarSeAtrasado(item) ? 'ATRASADOS' : item.situacao || 'PROGRAMADO');
 
+const pesoSituacaoEditor = (item) => {
+  const situacao = situacaoVisual(item);
+
+  if (situacao === 'ATRASADOS') return 0;
+  if (situacao === 'PROGRAMADO') return 1;
+  if (situacao === 'EM ANDAMENTO') return 2;
+  if (situacao === 'AGUARDANDO PEÇA') return 3;
+  if (situacao === 'FINALIZADO') return 9;
+
+  return 5;
+};
+
 const normalizarSituacaoPorDatas = (item) => {
   if (parseDate(item?.data_final)) return { ...item, situacao: 'FINALIZADO' };
   if (checarSeAtrasado(item)) return { ...item, situacao: 'ATRASADOS' };
@@ -283,10 +295,21 @@ const Programacao = () => {
       if (!a.id && b.id) return -1;
       if (a.id && !b.id) return 1;
       if (ordenacaoEditor === 'placa') return (a.placa || '').localeCompare(b.placa || '');
+
+      if (ordenacaoEditor === 'situacao') {
+        const pesoA = pesoSituacaoEditor(a);
+        const pesoB = pesoSituacaoEditor(b);
+      
+        if (pesoA !== pesoB) return pesoA - pesoB;
+      
+        return (parseDate(a.data_parada)?.getTime() || 0) - (parseDate(b.data_parada)?.getTime() || 0);
+      }
+      
       if (ordenacaoEditor === 'prioridade') {
-        const peso = { 'CR\u00cdTICA': 4, ALTA: 3, 'M\u00c9DIA': 2, BAIXA: 1 };
+        const peso = { 'CRÍTICA': 4, ALTA: 3, 'MÉDIA': 2, BAIXA: 1 };
         return (peso[normalizarTexto(b.prioridade)] || 0) - (peso[normalizarTexto(a.prioridade)] || 0);
       }
+      
       return (parseDate(b.created_at)?.getTime() || 0) - (parseDate(a.created_at)?.getTime() || 0);
     }), [linhasPlanilha, buscaEditor, filiaisEditor, ordenacaoEditor]);
 
@@ -901,14 +924,14 @@ const handleDragOverGantt = (e) => {
                   </div>
 
                   {isOpen && (
-                    <div className="p-3 overflow-y-auto h-full flex flex-wrap gap-3 items-start content-start bg-slate-50/40">
+                    <div className="p-3 overflow-y-auto h-full flex flex-wrap gap-3 items-start content-start bg-slate-50/40 overflow-x-visible">
                       {itens.map((item) => (
                         <div
                           key={item.id}
                           draggable
                           onDragStart={(e) => onDragStartKanban(e, item)}
                           onClick={abrirModalPlanilha}
-                          className={`relative group p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 ${checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
+                          className={`relative group p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 hover:z-[300] ${checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
                         >
                           <div className="flex justify-between items-start mb-1">
                             <h4 className="font-black text-slate-700 text-base">{item.placa}</h4>
@@ -1066,7 +1089,7 @@ const handleDragOverGantt = (e) => {
                                     <Edit3 size={14} className="md:w-[18px] md:h-[18px]" />
                                   </button>
                                 </div>
-                                <div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[200]">
+                                className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]"
                                   <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">{item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}</div>
                                   <div className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-1">
                                     <span className="font-black text-slate-400 uppercase">Manutencao</span><span className="font-bold">{item.tipo || '-'}</span>
@@ -1111,10 +1134,11 @@ const handleDragOverGantt = (e) => {
                   ))}
                 </div>
                 <select value={ordenacaoEditor} onChange={(e) => setOrdenacaoEditor(e.target.value)} className="bg-white text-slate-700 text-xs font-bold p-1.5 rounded-lg outline-none cursor-pointer">
-                  <option value="recente">Ord: Mais Recentes</option>
-                  <option value="placa">Ord: Placa A-Z</option>
-                  <option value="prioridade">Ord: Prioridade</option>
-                </select>
+                <option value="recente">Ord: Mais Recentes</option>
+                <option value="situacao">Ord: Programados Primeiro</option>
+                <option value="placa">Ord: Placa A-Z</option>
+                <option value="prioridade">Ord: Prioridade</option>
+              </select>
                 <button onClick={() => setModalPlanilhaAberto(false)} className="hover:bg-white/20 p-1.5 rounded-lg text-white transition ml-auto md:ml-2" title="Fechar"><X size={18} /></button>
               </div>
             </div>
