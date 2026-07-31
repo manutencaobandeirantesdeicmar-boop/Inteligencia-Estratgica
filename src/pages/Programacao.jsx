@@ -1088,8 +1088,7 @@ const handleDragOverGantt = (e) => {
                                     <Edit3 size={14} className="md:w-[18px] md:h-[18px]" />
                                   </button>
                                 </div>
-                                className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]"
-                                  <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">{item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}</div>
+<div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]">                                  <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">{item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}</div>
                                   <div className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-1">
                                     <span className="font-black text-slate-400 uppercase">Manutencao</span><span className="font-bold">{item.tipo || '-'}</span>
                                     <span className="font-black text-slate-400 uppercase">Responsavel</span><span className="font-bold">{item.responsavel || '-'}</span>
