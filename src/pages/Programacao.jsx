@@ -101,6 +101,26 @@ const checarSeAtrasado = (item) => {
 
 const situacaoVisual = (item) => (checarSeAtrasado(item) ? 'ATRASADOS' : item.situacao || 'PROGRAMADO');
 
+const classeGanttItem = (item) => {
+  const situacao = situacaoVisual(item);
+
+  if (situacao === 'ATRASADOS') return 'bg-gradient-to-r from-red-700 to-red-500';
+  if (situacao === 'EM ANDAMENTO') return 'bg-gradient-to-r from-emerald-600 to-green-500';
+  if (situacao === 'AGUARDANDO PEÇA') return 'bg-gradient-to-r from-purple-600 to-violet-500';
+  if (situacao === 'FINALIZADO') return 'bg-gradient-to-r from-slate-500 to-slate-400';
+  if (item.reprogramado === 'SIM') return 'bg-gradient-to-r from-amber-500 to-orange-500';
+
+  return 'bg-gradient-to-r from-[#0f4c81] to-[#10b981]';
+};
+
+const nomeDiaSemana = (valor) => {
+  const data = parseDate(valor);
+  if (!data) return 'SEM DATA';
+  return data.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+};
+
+
+
 const pesoSituacaoEditor = (item) => {
   const situacao = situacaoVisual(item);
 
@@ -161,6 +181,7 @@ const Programacao = () => {
   const [abaAtiva, setAbaAtiva] = useState('dashboard');
   const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
   const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
+  const [agrupamentoKanban, setAgrupamentoKanban] = useState('status');
   const [ordenacao, setOrdenacao] = useState('data');
   const [buscaEditor, setBuscaEditor] = useState('');
   const [filiaisEditor, setFiliaisEditor] = useState(['TODAS']);
@@ -313,6 +334,40 @@ const Programacao = () => {
       return (parseDate(b.created_at)?.getTime() || 0) - (parseDate(a.created_at)?.getTime() || 0);
     }), [linhasPlanilha, buscaEditor, filiaisEditor, ordenacaoEditor]);
 
+  const gruposKanban = useMemo(() => {
+  if (agrupamentoKanban === 'dia') {
+    const grupos = dadosFiltradosGerais.reduce((acc, item) => {
+      const titulo = nomeDiaSemana(item.data_parada).toUpperCase();
+      if (!acc[titulo]) acc[titulo] = [];
+      acc[titulo].push(item);
+      return acc;
+    }, {});
+
+    return Object.entries(grupos)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([titulo, itens]) => ({ titulo, itens }));
+  }
+
+  if (agrupamentoKanban === 'responsavel') {
+    const grupos = dadosFiltradosGerais.reduce((acc, item) => {
+      const titulo = normalizarTexto(item.responsavel) || 'SEM RESPONSAVEL';
+      if (!acc[titulo]) acc[titulo] = [];
+      acc[titulo].push(item);
+      return acc;
+    }, {});
+
+    return Object.entries(grupos)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([titulo, itens]) => ({ titulo, itens }));
+  }
+
+  return COLUNAS_KANBAN.map((titulo) => ({
+    titulo,
+    itens: dadosFiltradosGerais.filter((item) => situacaoVisual(item) === titulo),
+  }));
+}, [agrupamentoKanban, dadosFiltradosGerais]);
+  
+
   const prevWeek = () => setDataBaseGantt((d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7));
   const nextWeek = () => setDataBaseGantt((d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7));
   const resetWeek = () => setDataBaseGantt(inicioSemanaSabado());
@@ -342,6 +397,12 @@ const Programacao = () => {
   setNovaManutencao(linha);
   setModalNovaManutencaoAberto(true);
 };
+
+  const abrirModalEditarManutencao = (item) => {
+  setNovaManutencao({ ...buildLinhaVazia(), ...item });
+  setModalNovaManutencaoAberto(true);
+};
+  
   
   const adicionarNovaLinha = () => setLinhasPlanilha((prev) => [buildLinhaVazia(), ...prev]);
 
@@ -425,19 +486,21 @@ const Programacao = () => {
   }
 
   setSalvandoNovaManutencao(true);
-  const { id, created_at, ...dadosInsert } = payload;
-  const { error } = await supabase.from('programacao').insert([dadosInsert]);
+  const { id, created_at, updated_at, ...dadosSalvar } = payload;
+  const { error } = id
+    ? await supabase.from('programacao').update(dadosSalvar).eq('id', id)
+    : await supabase.from('programacao').insert([dadosSalvar]);
   setSalvandoNovaManutencao(false);
 
   if (error) {
-    alert(`Erro ao criar manutencao: ${error.message}`);
+    alert(`Erro ao salvar manutencao: ${error.message}`);
     return;
   }
 
   setModalNovaManutencaoAberto(false);
   setNovaManutencao(buildLinhaVazia());
   await fetchProgramacao();
-  alert('Manutencao criada com sucesso!');
+  alert(id ? 'Manutencao atualizada com sucesso!' : 'Manutencao criada com sucesso!');
 };
 
   
@@ -480,6 +543,14 @@ const Programacao = () => {
     if (!item) return;
 
     const payload = { situacao: novaSituacao };
+    if (novaSituacao === 'EM ANDAMENTO') {
+  const valor = window.prompt(
+    'Informe a data e hora de inicio (AAAA-MM-DD HH:mm):',
+    formatDtInput(item.data_parada || new Date()).replace('T', ' ')
+  );
+  if (!valor) return;
+  payload.data_parada = toIsoOrNull(valor.replace(' ', 'T'));
+}
     if (novaSituacao === 'FINALIZADO' && !item.data_final) {
       const valor = window.prompt('Informe a data e hora de fim (AAAA-MM-DD HH:mm):', formatDtInput(new Date()).replace('T', ' '));
       if (!valor) return;
@@ -803,6 +874,45 @@ const handleDragOverGantt = (e) => {
     }
   };
 
+  const renderKanbanCard = (item) => (
+  <div
+    key={item.id}
+    draggable
+    onDragStart={(e) => onDragStartKanban(e, item)}
+    onClick={(e) => {
+      e.stopPropagation();
+      abrirModalEditarManutencao(item);
+    }}
+    className={`relative group p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 hover:z-[300] ${checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
+  >
+    <div className="flex justify-between items-start mb-1">
+      <h4 className="font-black text-slate-700 text-base">{item.placa}</h4>
+      <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase border border-slate-200">OS: {item.os || '-'}</span>
+    </div>
+    <p className="text-[10px] font-black text-red-500 mb-2 uppercase tracking-wide truncate">{item.tipo} - {item.falha}</p>
+    {item.reprogramado === 'SIM' && <span className="inline-flex text-[9px] font-black text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">REPROGRAMADO</span>}
+    <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+      <span className="truncate">Resp: <strong className="text-slate-600">{item.responsavel || '-'}</strong></span>
+      <span className="font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0 border border-slate-200/60">{item.filial}</span>
+    </div>
+    <div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]">
+      <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">
+        {item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}
+      </div>
+      <div className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-1">
+        <span className="font-black text-slate-400 uppercase">Manutencao</span><span className="font-bold">{item.tipo || '-'}</span>
+        <span className="font-black text-slate-400 uppercase">Responsavel</span><span className="font-bold">{item.responsavel || '-'}</span>
+        <span className="font-black text-slate-400 uppercase">Falha</span><span className="font-bold">{item.falha || '-'}</span>
+        <span className="font-black text-slate-400 uppercase">OS</span><span className="font-bold">{item.os || '-'}</span>
+        <span className="font-black text-slate-400 uppercase">Inicio</span><span className="font-bold">{formatarDataHoraBR(item.data_parada)}</span>
+        <span className="font-black text-slate-400 uppercase">Prazo</span><span className="font-bold">{formatarDataHoraBR(item.prazo)}</span>
+        <span className="font-black text-slate-400 uppercase">Fim</span><span className="font-bold">{formatarDataHoraBR(item.data_final)}</span>
+        <span className="font-black text-slate-400 uppercase">Observacoes</span><span className="font-bold whitespace-normal">{item.observacoes || '-'}</span>
+      </div>
+    </div>
+  </div>
+);
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 font-sans antialiased">
       <header className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] text-white p-4 shadow-lg flex flex-col sm:flex-row justify-between items-center sticky top-0 z-30 gap-4">
@@ -843,6 +953,11 @@ const handleDragOverGantt = (e) => {
             <select value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)} className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-[#0f4c81] outline-none text-xs uppercase cursor-pointer">
               <option value="data">Ord: Por Data</option>
               <option value="prioridade">Ord: Por Prioridade</option>
+            </select>
+            <select value={agrupamentoKanban} onChange={(e) => setAgrupamentoKanban(e.target.value)} className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-[#0f4c81] outline-none text-xs uppercase cursor-pointer">
+              <option value="status">Kanban: Por Status</option>
+              <option value="dia">Kanban: Por Dia</option>
+              <option value="responsavel">Kanban: Por Responsavel</option>
             </select>
           </div>
         </div>
@@ -906,84 +1021,52 @@ const handleDragOverGantt = (e) => {
         )}
 
         {!loading && abaAtiva === 'kanban' && (
-          <div className="flex flex-col md:flex-row gap-4 w-full h-auto md:h-[75vh] items-stretch animate-in fade-in duration-200">
-            {COLUNAS_KANBAN.map((coluna) => {
-              const isOpen = colunaAberta === coluna;
-              const itens = dadosFiltradosGerais.filter((item) => situacaoVisual(item) === coluna);
-              return (
-                <div
-                  key={coluna}
-                  onDragOver={(e) => { e.preventDefault(); if (colunaAberta !== coluna) setColunaAberta(coluna); }}
-                  onDrop={(e) => onDropKanban(e, coluna)}
-                  onClick={() => !isOpen && setColunaAberta(coluna)}
-                  className={`transition-all duration-500 flex flex-col bg-white rounded-2xl border ${isOpen ? 'border-slate-200 flex-1 shadow-md min-h-[300px]' : 'border-slate-100 h-14 md:h-full md:w-[65px] cursor-pointer hover:bg-slate-50'}`}
-                >
-                  <div className={`p-4 flex justify-between items-center bg-slate-50 border-b border-slate-100 ${!isOpen && 'md:h-full md:flex-col md:justify-start md:pt-8'}`}>
-                    <h3 className={`font-black uppercase tracking-widest text-xs ${coluna === 'ATRASADOS' ? 'text-red-600' : 'text-[#0f4c81]'} ${isOpen ? '' : 'md:[writing-mode:vertical-lr] md:rotate-180'}`}>{coluna}</h3>
-                    <span className={`font-bold rounded-full flex items-center justify-center text-xs ${coluna === 'ATRASADOS' ? 'bg-red-100 text-red-700' : 'bg-[#0f4c81] text-white'} ${isOpen ? 'px-2.5 py-0.5' : 'w-6 h-6 md:mt-4'}`}>{itens.length}</span>
-                  </div>
+  <div className="space-y-4 animate-in fade-in duration-200">
+    {agrupamentoKanban === 'status' ? (
+      <div className="flex flex-col md:flex-row gap-4 w-full h-auto md:h-[75vh] items-stretch">
+        {gruposKanban.map((grupo) => {
+          const isOpen = colunaAberta === grupo.titulo;
+          return (
+            <div
+              key={grupo.titulo}
+              onDragOver={(e) => { e.preventDefault(); if (colunaAberta !== grupo.titulo) setColunaAberta(grupo.titulo); }}
+              onDrop={(e) => onDropKanban(e, grupo.titulo)}
+              onClick={() => !isOpen && setColunaAberta(grupo.titulo)}
+              className={`transition-all duration-500 flex flex-col bg-white rounded-2xl border ${isOpen ? 'border-slate-200 flex-1 shadow-md min-h-[300px]' : 'border-slate-100 h-14 md:h-full md:w-[65px] cursor-pointer hover:bg-slate-50'}`}
+            >
+              <div className={`p-4 flex justify-between items-center bg-slate-50 border-b border-slate-100 ${!isOpen && 'md:h-full md:flex-col md:justify-start md:pt-8'}`}>
+                <h3 className={`font-black uppercase tracking-widest text-xs ${grupo.titulo === 'ATRASADOS' ? 'text-red-600' : 'text-[#0f4c81]'} ${isOpen ? '' : 'md:[writing-mode:vertical-lr] md:rotate-180'}`}>{grupo.titulo}</h3>
+                <span className={`font-bold rounded-full flex items-center justify-center text-xs ${grupo.titulo === 'ATRASADOS' ? 'bg-red-100 text-red-700' : 'bg-[#0f4c81] text-white'} ${isOpen ? 'px-2.5 py-0.5' : 'w-6 h-6 md:mt-4'}`}>{grupo.itens.length}</span>
+              </div>
 
-                  {isOpen && (
-                    <div className="p-3 overflow-y-auto h-full flex flex-wrap gap-3 items-start content-start bg-slate-50/40 overflow-x-visible">
-                      {itens.map((item) => (
-                        <div
-                          key={item.id}
-                          draggable
-                          onDragStart={(e) => onDragStartKanban(e, item)}
-                          onClick={abrirModalPlanilha}
-                          className={`relative group p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 hover:z-[300] ${checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
-                        >
-                          <div className="flex justify-between items-start mb-1">
-                            <h4 className="font-black text-slate-700 text-base">{item.placa}</h4>
-                            <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase border border-slate-200">OS: {item.os || '-'}</span>
-                          </div>
-                          <p className="text-[10px] font-black text-red-500 mb-2 uppercase tracking-wide truncate">{item.tipo} - {item.falha}</p>
-                          {item.reprogramado === 'SIM' && <span className="inline-flex text-[9px] font-black text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">REPROGRAMADO</span>}
-                          <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
-                            <span className="truncate">Resp: <strong className="text-slate-600">{item.responsavel || '-'}</strong></span>
-                            <span className="font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0 border border-slate-200/60">{item.filial}</span>
-                          </div>
-                          <div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]">                          <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">
-                            {item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}
-                          </div>
-                        
-                          <div className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-1">
-                            <span className="font-black text-slate-400 uppercase">Manutencao</span>
-                            <span className="font-bold">{item.tipo || '-'}</span>
-                        
-                            <span className="font-black text-slate-400 uppercase">Responsavel</span>
-                            <span className="font-bold">{item.responsavel || '-'}</span>
-                        
-                            <span className="font-black text-slate-400 uppercase">Falha</span>
-                            <span className="font-bold">{item.falha || '-'}</span>
-                        
-                            <span className="font-black text-slate-400 uppercase">OS</span>
-                            <span className="font-bold">{item.os || '-'}</span>
-                        
-                            <span className="font-black text-slate-400 uppercase">Inicio</span>
-                            <span className="font-bold">{formatarDataHoraBR(item.data_parada)}</span>
-                        
-                            <span className="font-black text-slate-400 uppercase">Prazo</span>
-                            <span className="font-bold">{formatarDataHoraBR(item.prazo)}</span>
-                        
-                            <span className="font-black text-slate-400 uppercase">Fim</span>
-                            <span className="font-bold">{formatarDataHoraBR(item.data_final)}</span>
-                        
-                            <span className="font-black text-slate-400 uppercase">Observacoes</span>
-                            <span className="font-bold whitespace-normal">{item.observacoes || '-'}</span>
-                          </div>
-                        </div>
-                          
-                        </div>
-                      ))}
-                      {!itens.length && <p className="text-[11px] text-slate-400 font-bold italic p-4 mx-auto">Nenhuma programacao cadastrada.</p>}
-                    </div>
-                  )}
+              {isOpen && (
+                <div className="p-3 overflow-y-auto h-full flex flex-wrap gap-3 items-start content-start bg-slate-50/40 overflow-x-visible">
+                  {grupo.itens.map(renderKanbanCard)}
+                  {!grupo.itens.length && <p className="text-[11px] text-slate-400 font-bold italic p-4 mx-auto">Nenhuma programacao cadastrada.</p>}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      <div className="space-y-5">
+        {gruposKanban.map((grupo) => (
+          <section key={grupo.titulo} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-visible">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-black text-[#0f4c81] uppercase tracking-widest text-xs">{grupo.titulo}</h3>
+              <span className="font-bold rounded-full bg-[#0f4c81] text-white text-xs px-2.5 py-0.5">{grupo.itens.length}</span>
+            </div>
+            <div className="p-3 flex flex-wrap gap-3 items-start content-start bg-slate-50/40 overflow-visible">
+              {grupo.itens.map(renderKanbanCard)}
+              {!grupo.itens.length && <p className="text-[11px] text-slate-400 font-bold italic p-4 mx-auto">Nenhuma programacao cadastrada.</p>}
+            </div>
+          </section>
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
         {!loading && abaAtiva === 'cronograma' && (
         <div className="bg-white rounded-[2rem] shadow-xl border border-white overflow-visible flex flex-col">
@@ -1065,8 +1148,8 @@ const handleDragOverGantt = (e) => {
                                 style={{ width: `${(spanDays * LARGURA_DIA_GANTT) - 16}px` }}
                               >
                                 <div
-                                  onDoubleClick={() => abrirModalPlanilhaComItem(item)}
-                                  className={`h-full w-full rounded-2xl shadow-md p-2 md:p-4 text-white flex items-center justify-between border-2 border-white/20 hover:brightness-110 hover:shadow-lg transition-all relative overflow-hidden ${item.reprogramado === 'SIM' ? 'bg-gradient-to-r from-red-600 to-amber-500' : 'bg-gradient-to-r from-[#0f4c81] to-[#10b981]'}`}
+                                  onDoubleClick={() => abrirModalEditarManutencao(item)}
+                                  className={`h-full w-full rounded-2xl shadow-md p-2 md:p-4 text-white flex items-center justify-between border-2 border-white/20 hover:brightness-110 hover:shadow-lg transition-all relative overflow-hidden ${classeGanttItem(item)}`}
                                 >
                                   <div className="flex flex-col truncate pr-2 md:pr-6">
                                     <div className="flex items-center gap-1 md:gap-2">
@@ -1079,7 +1162,7 @@ const handleDragOverGantt = (e) => {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      abrirModalPlanilhaComItem(item);
+                                      abrirModalEditarManutencao(item);
                                     }}
                                     onDragStart={(e) => e.preventDefault()}
                                     className="absolute right-1 md:right-4 opacity-70 group-hover:opacity-100 hover:bg-white/20 p-1 rounded-lg transition"
@@ -1205,7 +1288,9 @@ const handleDragOverGantt = (e) => {
     <div className="bg-white w-full h-full md:h-auto md:max-h-[92vh] md:max-w-5xl rounded-none md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
       <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-4 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 shrink-0 text-white shadow-md">
         <div>
-          <h2 className="font-black text-sm uppercase tracking-widest flex items-center gap-2"><PlusCircle size={18} /> Nova manutencao</h2>
+          <h2 className="font-black text-sm uppercase tracking-widest flex items-center gap-2">
+            <PlusCircle size={18} /> {novaManutencao.id ? 'Editar manutencao' : 'Nova manutencao'}
+          </h2>
           <p className="text-[11px] text-white/75 font-bold mt-1">Atalho do Gantt com os mesmos campos do editor base de dados.</p>
         </div>
         <button onClick={() => setModalNovaManutencaoAberto(false)} className="hover:bg-white/20 p-2 rounded-lg text-white transition self-end sm:self-auto" title="Fechar"><X size={18} /></button>
@@ -1288,7 +1373,7 @@ const handleDragOverGantt = (e) => {
       <div className="p-4 bg-white border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
         <button onClick={() => setModalNovaManutencaoAberto(false)} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border border-slate-200 text-slate-500 hover:bg-slate-50 transition">Cancelar</button>
         <button onClick={salvarNovaManutencao} disabled={salvandoNovaManutencao} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#0f4c81] text-white hover:bg-[#0b3b65] disabled:opacity-60 transition flex items-center justify-center gap-2">
-          <Save size={16} /> {salvandoNovaManutencao ? 'Salvando...' : 'Salvar manutencao'}
+          <Save size={16} /> {salvandoNovaManutencao ? 'Salvando...' : (novaManutencao.id ? 'Atualizar manutencao' : 'Salvar manutencao')}
         </button>
       </div>
     </div>
