@@ -93,13 +93,22 @@ const mesmaDataBase = (a, b) => {
 };
 
 const checarSeAtrasado = (item) => {
-  if (!item || item.situacao === 'FINALIZADO') return false;
-  const prazo = parseDate(item.prazo || item.data_final || item.data_parada);
+  if (!item || parseDate(item.data_final)) return false;
+  const prazo = parseDate(item.prazo);
   if (!prazo) return false;
   return prazo.getTime() < Date.now();
 };
 
-const situacaoVisual = (item) => (checarSeAtrasado(item) ? 'ATRASADOS' : item.situacao || 'PROGRAMADO');
+const situacaoVisual = (item) => {
+  if (parseDate(item?.data_final)) return 'FINALIZADO';
+  if (checarSeAtrasado(item)) return 'ATRASADOS';
+
+  const situacao = normalizarTexto(item?.situacao);
+  if (situacao === 'EM ANDAMENTO') return 'EM ANDAMENTO';
+  if (situacao === 'AGUARDANDO PEÇA') return 'AGUARDANDO PEÇA';
+
+  return 'PROGRAMADO';
+};
 
 const classeGanttItem = (item) => {
   const situacao = situacaoVisual(item);
@@ -113,12 +122,44 @@ const classeGanttItem = (item) => {
   return 'bg-gradient-to-r from-[#0f4c81] to-[#10b981]';
 };
 
+const classeKanbanCard = (item) => {
+  const situacao = situacaoVisual(item);
+
+  if (situacao === 'ATRASADOS') return 'border-l-red-500 bg-red-50/60';
+  if (situacao === 'EM ANDAMENTO') return 'border-l-emerald-500 bg-emerald-50/60';
+  if (situacao === 'AGUARDANDO PEÇA') return 'border-l-purple-500 bg-purple-50/60';
+  if (situacao === 'FINALIZADO') return 'border-l-slate-400 bg-slate-50/80';
+  if (item.reprogramado === 'SIM') return 'border-l-amber-500 bg-amber-50/70';
+
+  return 'border-l-[#0f4c81] bg-white';
+};
+
+const classeEtiquetaStatus = (item) => {
+  const situacao = situacaoVisual(item);
+
+  if (situacao === 'ATRASADOS') return 'bg-red-100 text-red-700 border-red-200';
+  if (situacao === 'EM ANDAMENTO') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  if (situacao === 'AGUARDANDO PEÇA') return 'bg-purple-100 text-purple-700 border-purple-200';
+  if (situacao === 'FINALIZADO') return 'bg-slate-100 text-slate-600 border-slate-200';
+  if (item.reprogramado === 'SIM') return 'bg-amber-100 text-amber-700 border-amber-200';
+
+  return 'bg-blue-100 text-[#0f4c81] border-blue-200';
+};
+
 const nomeDiaSemana = (valor) => {
   const data = parseDate(valor);
   if (!data) return 'SEM DATA';
   return data.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
 };
 
+const chaveDia = (valor) => {
+  const data = parseDate(valor);
+  if (!data) return '9999-12-31';
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+};
 
 
 const pesoSituacaoEditor = (item) => {
@@ -136,7 +177,13 @@ const pesoSituacaoEditor = (item) => {
 const normalizarSituacaoPorDatas = (item) => {
   if (parseDate(item?.data_final)) return { ...item, situacao: 'FINALIZADO' };
   if (checarSeAtrasado(item)) return { ...item, situacao: 'ATRASADOS' };
-  return item;
+
+  const situacao = normalizarTexto(item?.situacao);
+  if (situacao === 'EM ANDAMENTO' || situacao === 'AGUARDANDO PEÇA') {
+    return { ...item, situacao };
+  }
+
+  return { ...item, situacao: 'PROGRAMADO' };
 };
 
 const buildLinhaVazia = () => ({
@@ -296,14 +343,24 @@ const Programacao = () => {
     return inicio.getTime() <= fimSemana && fim.getTime() >= inicioSemana;
   }), [dadosFiltradosGerais, diasDaSemana]);
 
-  const itensGantt = useMemo(() => dadosFiltradosGerais.filter((item) => {
-  const inicio = parseDate(item.data_parada);
-  if (!inicio) return false;
-  const fim = parseDate(item.data_final || item.prazo || item.data_parada) || inicio;
-  const inicioPeriodo = new Date(diasGantt[0]).setHours(0, 0, 0, 0);
-  const fimPeriodo = new Date(diasGantt[diasGantt.length - 1]).setHours(23, 59, 59, 999);
-  return inicio.getTime() <= fimPeriodo && fim.getTime() >= inicioPeriodo;
-}), [dadosFiltradosGerais, diasGantt]);
+  const itensGantt = useMemo(() => dadosFiltradosGerais
+  .filter((item) => {
+    const inicio = parseDate(item.data_parada);
+    if (!inicio) return false;
+    const fim = parseDate(item.data_final || item.prazo || item.data_parada) || inicio;
+    const inicioPeriodo = new Date(diasGantt[0]).setHours(0, 0, 0, 0);
+    const fimPeriodo = new Date(diasGantt[diasGantt.length - 1]).setHours(23, 59, 59, 999);
+    return inicio.getTime() <= fimPeriodo && fim.getTime() >= inicioPeriodo;
+  })
+  .sort((a, b) => {
+    const aFinalizado = situacaoVisual(a) === 'FINALIZADO';
+    const bFinalizado = situacaoVisual(b) === 'FINALIZADO';
+
+    if (aFinalizado && !bFinalizado) return 1;
+    if (!aFinalizado && bFinalizado) return -1;
+
+    return (parseDate(a.data_parada)?.getTime() || 0) - (parseDate(b.data_parada)?.getTime() || 0);
+  }), [dadosFiltradosGerais, diasGantt]);
 
   const linhasEditorFiltradas = useMemo(() => linhasPlanilha
     .filter((item) => {
@@ -336,17 +393,22 @@ const Programacao = () => {
 
   const gruposKanban = useMemo(() => {
   if (agrupamentoKanban === 'dia') {
-    const grupos = dadosFiltradosGerais.reduce((acc, item) => {
-      const titulo = nomeDiaSemana(item.data_parada).toUpperCase();
-      if (!acc[titulo]) acc[titulo] = [];
-      acc[titulo].push(item);
-      return acc;
-    }, {});
+  const grupos = dadosFiltradosGerais.reduce((acc, item) => {
+    const chave = chaveDia(item.data_parada);
+    const titulo = nomeDiaSemana(item.data_parada).toUpperCase();
 
-    return Object.entries(grupos)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([titulo, itens]) => ({ titulo, itens }));
-  }
+    if (!acc[chave]) acc[chave] = { titulo, itens: [] };
+    acc[chave].itens.push(item);
+    return acc;
+  }, {});
+
+  return Object.entries(grupos)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, grupo]) => ({
+      ...grupo,
+      itens: grupo.itens.sort((a, b) => (parseDate(a.data_parada)?.getTime() || 0) - (parseDate(b.data_parada)?.getTime() || 0)),
+    }));
+}
 
   if (agrupamentoKanban === 'responsavel') {
     const grupos = dadosFiltradosGerais.reduce((acc, item) => {
@@ -429,14 +491,20 @@ const Programacao = () => {
   };
 
   const atualizarNovaManutencao = (campo, valor) => {
-    setNovaManutencao((prev) => {
-      const novaLinha = { ...prev, [campo]: campo === 'placa' ? normalizarTexto(valor) : valor };
-      if (campo === 'data_final') {
-        novaLinha.situacao = parseDate(valor) ? 'FINALIZADO' : (prev.situacao === 'FINALIZADO' ? 'PROGRAMADO' : prev.situacao);
-      }
-      return novaLinha;
-    });
-  };
+  setNovaManutencao((prev) => {
+    const novaLinha = { ...prev, [campo]: campo === 'placa' ? normalizarTexto(valor) : valor };
+
+    if (campo === 'prazo' && prev.id && !mesmaDataBase(prev.prazo, valor)) {
+      novaLinha.reprogramado = 'SIM';
+    }
+
+    if (campo === 'data_final') {
+      novaLinha.situacao = parseDate(valor) ? 'FINALIZADO' : 'PROGRAMADO';
+    }
+
+    return novaLinha;
+  });
+};
 
   const montarPayload = (linha) => {
     const payload = {
@@ -883,7 +951,7 @@ const handleDragOverGantt = (e) => {
       e.stopPropagation();
       abrirModalEditarManutencao(item);
     }}
-    className={`relative group p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 hover:z-[300] ${checarSeAtrasado(item) ? 'border-l-red-500' : 'border-l-[#0f4c81]'}`}
+    className={`relative group p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 hover:z-[300] ${classeKanbanCard(item)}`}
   >
     <div className="flex justify-between items-start mb-1">
       <h4 className="font-black text-slate-700 text-base">{item.placa}</h4>
@@ -891,6 +959,9 @@ const handleDragOverGantt = (e) => {
     </div>
     <p className="text-[10px] font-black text-red-500 mb-2 uppercase tracking-wide truncate">{item.tipo} - {item.falha}</p>
     {item.reprogramado === 'SIM' && <span className="inline-flex text-[9px] font-black text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">REPROGRAMADO</span>}
+    <span className={`inline-flex text-[9px] font-black border rounded px-2 py-0.5 mt-2 ${classeEtiquetaStatus(item)}`}>
+  {situacaoVisual(item)}
+</span>
     <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
       <span className="truncate">Resp: <strong className="text-slate-600">{item.responsavel || '-'}</strong></span>
       <span className="font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0 border border-slate-200/60">{item.filial}</span>
