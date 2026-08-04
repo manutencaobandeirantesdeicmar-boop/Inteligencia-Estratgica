@@ -1051,10 +1051,6 @@ const handleDragOverGantt = (e) => {
                   Exibir também manutenções já finalizadas?
                 </label>
               )}
-              <option value="status">Kanban: Por Status</option>
-              <option value="dia">Kanban: Por Dia</option>
-              <option value="responsavel">Kanban: Por Responsavel</option>
-            </select>
           </div>
         </div>
 
