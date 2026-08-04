@@ -1030,8 +1030,17 @@ const handleDragOverGantt = (e) => {
               <option value="data">Ord: Por Data</option>
               <option value="prioridade">Ord: Por Prioridade</option>
             </select>
-            <select value={agrupamentoKanban} onChange={(e) => setAgrupamentoKanban(e.target.value)} className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-[#0f4c81] outline-none text-xs uppercase cursor-pointer">
-                {agrupamentoKanban !== 'status' && (
+              <select
+                value={agrupamentoKanban}
+                onChange={(e) => setAgrupamentoKanban(e.target.value)}
+                className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-[#0f4c81] outline-none text-xs uppercase cursor-pointer"
+              >
+                <option value="status">Kanban: Por Status</option>
+                <option value="dia">Kanban: Por Dia</option>
+                <option value="responsavel">Kanban: Por Responsavel</option>
+              </select>
+              
+              {agrupamentoKanban !== 'status' && (
                 <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-[10px] font-black uppercase text-slate-500 cursor-pointer">
                   <input
                     type="checkbox"
