@@ -229,6 +229,7 @@ const Programacao = () => {
   const [filiaisSelecionadas, setFiliaisSelecionadas] = useState(['TODAS']);
   const [colunaAberta, setColunaAberta] = useState('EM ANDAMENTO');
   const [agrupamentoKanban, setAgrupamentoKanban] = useState('status');
+  const [mostrarFinalizadasAgrupadas, setMostrarFinalizadasAgrupadas] = useState(false);
   const [ordenacao, setOrdenacao] = useState('data');
   const [buscaEditor, setBuscaEditor] = useState('');
   const [filiaisEditor, setFiliaisEditor] = useState(['TODAS']);
@@ -391,43 +392,47 @@ const Programacao = () => {
       return (parseDate(b.created_at)?.getTime() || 0) - (parseDate(a.created_at)?.getTime() || 0);
     }), [linhasPlanilha, buscaEditor, filiaisEditor, ordenacaoEditor]);
 
-  const gruposKanban = useMemo(() => {
-  if (agrupamentoKanban === 'dia') {
-  const grupos = dadosFiltradosGerais.reduce((acc, item) => {
-    const chave = chaveDia(item.data_parada);
-    const titulo = nomeDiaSemana(item.data_parada).toUpperCase();
-
-    if (!acc[chave]) acc[chave] = { titulo, itens: [] };
-    acc[chave].itens.push(item);
-    return acc;
-  }, {});
-
-  return Object.entries(grupos)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, grupo]) => ({
-      ...grupo,
-      itens: grupo.itens.sort((a, b) => (parseDate(a.data_parada)?.getTime() || 0) - (parseDate(b.data_parada)?.getTime() || 0)),
-    }));
-}
-
-  if (agrupamentoKanban === 'responsavel') {
-    const grupos = dadosFiltradosGerais.reduce((acc, item) => {
-      const titulo = normalizarTexto(item.responsavel) || 'SEM RESPONSAVEL';
-      if (!acc[titulo]) acc[titulo] = [];
-      acc[titulo].push(item);
-      return acc;
-    }, {});
-
-    return Object.entries(grupos)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([titulo, itens]) => ({ titulo, itens }));
-  }
-
-  return COLUNAS_KANBAN.map((titulo) => ({
-    titulo,
-    itens: dadosFiltradosGerais.filter((item) => situacaoVisual(item) === titulo),
-  }));
-}, [agrupamentoKanban, dadosFiltradosGerais]);
+     const gruposKanban = useMemo(() => {
+      const dadosKanbanAgrupados = agrupamentoKanban === 'status'
+        ? dadosFiltradosGerais
+        : dadosFiltradosGerais.filter((item) => mostrarFinalizadasAgrupadas || situacaoVisual(item) !== 'FINALIZADO');
+    
+      if (agrupamentoKanban === 'dia') {
+        const grupos = dadosKanbanAgrupados.reduce((acc, item) => {
+          const chave = chaveDia(item.data_parada);
+          const titulo = nomeDiaSemana(item.data_parada).toUpperCase();
+    
+          if (!acc[chave]) acc[chave] = { titulo, itens: [] };
+          acc[chave].itens.push(item);
+          return acc;
+        }, {});
+    
+        return Object.entries(grupos)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([, grupo]) => ({
+            ...grupo,
+            itens: grupo.itens.sort((a, b) => (parseDate(a.data_parada)?.getTime() || 0) - (parseDate(b.data_parada)?.getTime() || 0)),
+          }));
+      }
+    
+      if (agrupamentoKanban === 'responsavel') {
+        const grupos = dadosKanbanAgrupados.reduce((acc, item) => {
+          const titulo = normalizarTexto(item.responsavel) || 'SEM RESPONSAVEL';
+          if (!acc[titulo]) acc[titulo] = [];
+          acc[titulo].push(item);
+          return acc;
+        }, {});
+    
+        return Object.entries(grupos)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([titulo, itens]) => ({ titulo, itens }));
+      }
+    
+      return COLUNAS_KANBAN.map((titulo) => ({
+        titulo,
+        itens: dadosKanbanAgrupados.filter((item) => situacaoVisual(item) === titulo),
+      }));
+    }, [agrupamentoKanban, dadosFiltradosGerais, mostrarFinalizadasAgrupadas]);
   
 
   const prevWeek = () => setDataBaseGantt((d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7));
@@ -1026,6 +1031,17 @@ const handleDragOverGantt = (e) => {
               <option value="prioridade">Ord: Por Prioridade</option>
             </select>
             <select value={agrupamentoKanban} onChange={(e) => setAgrupamentoKanban(e.target.value)} className="bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-[#0f4c81] outline-none text-xs uppercase cursor-pointer">
+                {agrupamentoKanban !== 'status' && (
+                <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-[10px] font-black uppercase text-slate-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mostrarFinalizadasAgrupadas}
+                    onChange={(e) => setMostrarFinalizadasAgrupadas(e.target.checked)}
+                    className="accent-[#0f4c81]"
+                  />
+                  Exibir também manutenções já finalizadas?
+                </label>
+              )}
               <option value="status">Kanban: Por Status</option>
               <option value="dia">Kanban: Por Dia</option>
               <option value="responsavel">Kanban: Por Responsavel</option>
