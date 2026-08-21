@@ -282,7 +282,7 @@ const Programacao = () => {
       const normalizados = registros.map(normalizarSituacaoPorDatas);
       setDados(normalizados);
       setLinhasPlanilha(normalizados);
-      atualizarSituacoesAutomaticasNoBanco(registros);
+      await atualizarSituacoesAutomaticasNoBanco(registros);
     } else {
       alert(`Erro ao carregar programacao: ${error.message}`);
     }
@@ -606,32 +606,85 @@ const Programacao = () => {
   };
 
   const onDragStartKanban = (e, item) => {
-    e.dataTransfer.setData('programacao-id', item.id);
+    const id = String(item.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('programacao-id', id);
+    e.dataTransfer.setData('text/plain', id);
   };
 
   const onDropKanban = async (e, novaSituacao) => {
     e.preventDefault();
-    const id = e.dataTransfer.getData('programacao-id');
+    const id = e.dataTransfer.getData('programacao-id') || e.dataTransfer.getData('text/plain');
     const item = dados.find((registro) => String(registro.id) === String(id));
     if (!item) return;
 
+    if (novaSituacao === 'ATRASADOS' && !checarSeAtrasado(item)) {
+      alert('A coluna ATRASADOS e automatica. Para mover este card, altere o prazo para uma data vencida.');
+      return;
+    }
+
     const payload = { situacao: novaSituacao };
+
+    if (novaSituacao !== 'FINALIZADO' && item.data_final) {
+      payload.data_final = null;
+    }
+
+    const prazoAtual = parseDate(item.prazo);
+    const ficariaAtrasadoAoReabrir = Boolean(item.data_final && prazoAtual && prazoAtual.getTime() < Date.now());
+    const precisaNovoPrazo = novaSituacao !== 'FINALIZADO'
+      && novaSituacao !== 'ATRASADOS'
+      && (checarSeAtrasado(item) || ficariaAtrasadoAoReabrir);
+
+    if (precisaNovoPrazo) {
+      const valorPrazo = window.prompt(
+        'Este card esta atrasado. Informe um novo prazo (AAAA-MM-DD HH:mm):',
+        formatDtInput(new Date(Date.now() + 24 * 60 * 60 * 1000)).replace('T', ' ')
+      );
+      if (!valorPrazo) return;
+
+      const novoPrazo = toIsoOrNull(valorPrazo.replace(' ', 'T'));
+      if (!novoPrazo || parseDate(novoPrazo).getTime() < Date.now()) {
+        alert('Informe um prazo valido que nao esteja vencido.');
+        return;
+      }
+      payload.prazo = novoPrazo;
+      payload.reprogramado = 'SIM';
+    }
+
     if (novaSituacao === 'EM ANDAMENTO') {
-  const valor = window.prompt(
-    'Informe a data e hora de inicio (AAAA-MM-DD HH:mm):',
-    formatDtInput(item.data_parada || new Date()).replace('T', ' ')
-  );
-  if (!valor) return;
-  payload.data_parada = toIsoOrNull(valor.replace(' ', 'T'));
-}
+      const valor = window.prompt(
+        'Informe a data e hora de inicio (AAAA-MM-DD HH:mm):',
+        formatDtInput(item.data_parada || new Date()).replace('T', ' ')
+      );
+      if (!valor) return;
+
+      const dataInicio = toIsoOrNull(valor.replace(' ', 'T'));
+      if (!dataInicio) {
+        alert('Informe uma data e hora de inicio validas.');
+        return;
+      }
+      payload.data_parada = dataInicio;
+    }
+
     if (novaSituacao === 'FINALIZADO' && !item.data_final) {
       const valor = window.prompt('Informe a data e hora de fim (AAAA-MM-DD HH:mm):', formatDtInput(new Date()).replace('T', ' '));
       if (!valor) return;
-      payload.data_final = toIsoOrNull(valor.replace(' ', 'T'));
+
+      const dataFinal = toIsoOrNull(valor.replace(' ', 'T'));
+      if (!dataFinal) {
+        alert('Informe uma data e hora de fim validas.');
+        return;
+      }
+      payload.data_final = dataFinal;
     }
+
     const { error } = await supabase.from('programacao').update(payload).eq('id', id);
-    if (!error) fetchProgramacao();
-    else alert(`Erro ao mover card: ${error.message}`);
+    if (!error) {
+      setColunaAberta(novaSituacao);
+      await fetchProgramacao();
+    } else {
+      alert(`Erro ao mover card: ${error.message}`);
+    }
   };
 
   const deslocarData = (valor, diffMs) => {
@@ -950,13 +1003,13 @@ const handleDragOverGantt = (e) => {
   const renderKanbanCard = (item) => (
   <div
     key={item.id}
-    draggable
+    draggable={agrupamentoKanban === 'status'}
     onDragStart={(e) => onDragStartKanban(e, item)}
     onClick={(e) => {
       e.stopPropagation();
       abrirModalEditarManutencao(item);
     }}
-    className={`relative group p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 hover:z-[300] ${classeKanbanCard(item)}`}
+    className={`relative group p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all w-full sm:w-[calc(50%-6px)] xl:w-[calc(33.33%-8px)] border-l-4 hover:z-[300] ${agrupamentoKanban === 'status' ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${classeKanbanCard(item)}`}
   >
     <div className="flex justify-between items-start mb-1">
       <h4 className="font-black text-slate-700 text-base">{item.placa}</h4>
@@ -1125,7 +1178,7 @@ const handleDragOverGantt = (e) => {
           return (
             <div
               key={grupo.titulo}
-              onDragOver={(e) => { e.preventDefault(); if (colunaAberta !== grupo.titulo) setColunaAberta(grupo.titulo); }}
+              onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => onDropKanban(e, grupo.titulo)}
               onClick={() => !isOpen && setColunaAberta(grupo.titulo)}
               className={`transition-all duration-500 flex flex-col bg-white rounded-2xl border ${isOpen ? 'border-slate-200 flex-1 shadow-md min-h-[300px]' : 'border-slate-100 h-14 md:h-full md:w-[65px] cursor-pointer hover:bg-slate-50'}`}
