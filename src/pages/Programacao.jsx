@@ -723,6 +723,40 @@ const handleDragOverGantt = (e) => {
   }
 };
 
+  const ajustarScrollTooltipGantt = (e) => {
+    const container = ganttScrollRef.current;
+    const tooltip = e.currentTarget.querySelector('[data-gantt-tooltip]');
+    if (!container || !tooltip) return;
+
+    window.requestAnimationFrame(() => {
+      const limite = container.getBoundingClientRect();
+      const balao = tooltip.getBoundingClientRect();
+      const margem = 12;
+      let deslocamentoX = 0;
+      let deslocamentoY = 0;
+
+      if (balao.right > limite.right - margem) {
+        deslocamentoX = balao.right - limite.right + margem;
+      } else if (balao.left < limite.left + margem) {
+        deslocamentoX = balao.left - limite.left - margem;
+      }
+
+      if (balao.bottom > limite.bottom - margem) {
+        deslocamentoY = balao.bottom - limite.bottom + margem;
+      } else if (balao.top < limite.top + margem) {
+        deslocamentoY = balao.top - limite.top - margem;
+      }
+
+      if (deslocamentoX || deslocamentoY) {
+        container.scrollBy({
+          left: deslocamentoX,
+          top: deslocamentoY,
+          behavior: 'smooth',
+        });
+      }
+    });
+  };
+
   const onDropGantt = async (e, diaDestino) => {
     e.preventDefault();
     const id = e.dataTransfer.getData('gantt-id');
@@ -1307,6 +1341,7 @@ const handleDragOverGantt = (e) => {
                               draggable
                               onClick={(e) => e.stopPropagation()}
                               onDragStart={(e) => onDragStartGantt(e, item)}
+                              onMouseEnter={ajustarScrollTooltipGantt}
                               className="absolute inset-y-2 left-2 z-10 hover:z-[100] group cursor-grab active:cursor-grabbing"
                                 style={{ width: `${(spanDays * LARGURA_DIA_GANTT) - 16}px` }}
                               >
@@ -1334,7 +1369,7 @@ const handleDragOverGantt = (e) => {
                                     <Edit3 size={14} className="md:w-[18px] md:h-[18px]" />
                                   </button>
                                 </div>
-<div className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]">                                  <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">{item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}</div>
+<div data-gantt-tooltip className="pointer-events-none absolute left-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-150 z-[400]">                                  <div className="font-black text-[#0f4c81] text-xs uppercase mb-2 truncate">{item.placa || '-'} {item.reprogramado === 'SIM' ? '- REPROGRAMADO' : ''}</div>
                                   <div className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-1">
                                     <span className="font-black text-slate-400 uppercase">Manutencao</span><span className="font-bold">{item.tipo || '-'}</span>
                                     <span className="font-black text-slate-400 uppercase">Responsavel</span><span className="font-bold">{item.responsavel || '-'}</span>
