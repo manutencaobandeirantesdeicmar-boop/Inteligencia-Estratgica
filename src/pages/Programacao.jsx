@@ -27,7 +27,7 @@ import {
 import { supabase } from '../services/supabase-config';
 
 const FILIAIS = ['CLIA', 'IPA', 'BK', 'HUB', 'FROTA'];
-const COLUNAS_KANBAN = ['ATRASADOS', 'PROGRAMADO', 'EM ANDAMENTO', 'AGUARDANDO PE\u00c7A', 'FINALIZADO'];
+const COLUNAS_KANBAN = ['PROGRAMADO', 'EM ANDAMENTO', 'AGUARDANDO PE\u00c7A', 'FINALIZADO'];
 const DIAS_SEMANA = ['S\u00c1B', 'DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX'];
 const DIAS_GANTT = 21;
 const LARGURA_DIA_GANTT = 160;
@@ -101,7 +101,6 @@ const checarSeAtrasado = (item) => {
 
 const situacaoVisual = (item) => {
   if (parseDate(item?.data_final)) return 'FINALIZADO';
-  if (checarSeAtrasado(item)) return 'ATRASADOS';
 
   const situacao = normalizarTexto(item?.situacao);
   if (situacao === 'EM ANDAMENTO') return 'EM ANDAMENTO';
@@ -113,7 +112,7 @@ const situacaoVisual = (item) => {
 const classeGanttItem = (item) => {
   const situacao = situacaoVisual(item);
 
-  if (situacao === 'ATRASADOS') return 'bg-gradient-to-r from-red-700 to-red-500';
+  if (checarSeAtrasado(item)) return 'bg-gradient-to-r from-red-700 to-red-500';
   if (situacao === 'EM ANDAMENTO') return 'bg-gradient-to-r from-emerald-600 to-green-500';
   if (situacao === 'AGUARDANDO PEÇA') return 'bg-gradient-to-r from-purple-600 to-violet-500';
   if (situacao === 'FINALIZADO') return 'bg-gradient-to-r from-slate-500 to-slate-400';
@@ -125,7 +124,7 @@ const classeGanttItem = (item) => {
 const classeKanbanCard = (item) => {
   const situacao = situacaoVisual(item);
 
-  if (situacao === 'ATRASADOS') return 'border-l-red-500 bg-red-50/60';
+  if (checarSeAtrasado(item)) return 'border-l-red-500 bg-red-50/60';
   if (situacao === 'EM ANDAMENTO') return 'border-l-emerald-500 bg-emerald-50/60';
   if (situacao === 'AGUARDANDO PEÇA') return 'border-l-purple-500 bg-purple-50/60';
   if (situacao === 'FINALIZADO') return 'border-l-slate-400 bg-slate-50/80';
@@ -137,7 +136,6 @@ const classeKanbanCard = (item) => {
 const classeEtiquetaStatus = (item) => {
   const situacao = situacaoVisual(item);
 
-  if (situacao === 'ATRASADOS') return 'bg-red-100 text-red-700 border-red-200';
   if (situacao === 'EM ANDAMENTO') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
   if (situacao === 'AGUARDANDO PEÇA') return 'bg-purple-100 text-purple-700 border-purple-200';
   if (situacao === 'FINALIZADO') return 'bg-slate-100 text-slate-600 border-slate-200';
@@ -165,7 +163,7 @@ const chaveDia = (valor) => {
 const pesoSituacaoEditor = (item) => {
   const situacao = situacaoVisual(item);
 
-  if (situacao === 'ATRASADOS') return 0;
+  if (checarSeAtrasado(item)) return 0;
   if (situacao === 'PROGRAMADO') return 1;
   if (situacao === 'EM ANDAMENTO') return 2;
   if (situacao === 'AGUARDANDO PEÇA') return 3;
@@ -176,13 +174,17 @@ const pesoSituacaoEditor = (item) => {
 
 const normalizarSituacaoPorDatas = (item) => {
   if (parseDate(item?.data_final)) return { ...item, situacao: 'FINALIZADO' };
-  if (checarSeAtrasado(item)) return { ...item, situacao: 'ATRASADOS' };
+  if (checarSeAtrasado(item)) return { ...item, situacao: 'EM ANDAMENTO' };
 
   const situacao = normalizarTexto(item?.situacao);
   if (situacao === 'AGUARDANDO PEÇA') return { ...item, situacao };
 
   const dataProgramada = parseDate(item?.data_parada);
-  if (dataProgramada && dataProgramada.getTime() <= Date.now()) {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  if (dataProgramada) dataProgramada.setHours(0, 0, 0, 0);
+
+  if (dataProgramada && dataProgramada.getTime() <= hoje.getTime()) {
     return { ...item, situacao: 'EM ANDAMENTO' };
   }
 
@@ -351,10 +353,10 @@ const Programacao = () => {
 
   const totalGeral = dadosFiltradosGerais.length;
   const cAtrasados = dadosFiltradosGerais.filter(checarSeAtrasado).length;
-  const cAndamento = dadosFiltradosGerais.filter((i) => i.situacao === 'EM ANDAMENTO' && !checarSeAtrasado(i)).length;
+  const cAndamento = dadosFiltradosGerais.filter((i) => situacaoVisual(i) === 'EM ANDAMENTO').length;
   const cAguardando = dadosFiltradosGerais.filter((i) => i.situacao === 'AGUARDANDO PE\u00c7A').length;
   const cFinalizados = dadosFiltradosGerais.filter((i) => i.situacao === 'FINALIZADO').length;
-  const cProgramados = dadosFiltradosGerais.filter((i) => i.situacao === 'PROGRAMADO' && !checarSeAtrasado(i)).length;
+  const cProgramados = dadosFiltradosGerais.filter((i) => situacaoVisual(i) === 'PROGRAMADO').length;
 
   const itensDaSemana = useMemo(() => dadosFiltradosGerais.filter((item) => {
     const inicio = parseDate(item.data_parada);
@@ -375,6 +377,11 @@ const Programacao = () => {
     return inicio.getTime() <= fimPeriodo && fim.getTime() >= inicioPeriodo;
   })
   .sort((a, b) => {
+    const aAtrasado = checarSeAtrasado(a);
+    const bAtrasado = checarSeAtrasado(b);
+    if (aAtrasado && !bAtrasado) return -1;
+    if (!aAtrasado && bAtrasado) return 1;
+
     const aFinalizado = situacaoVisual(a) === 'FINALIZADO';
     const bFinalizado = situacaoVisual(b) === 'FINALIZADO';
 
@@ -394,6 +401,12 @@ const Programacao = () => {
     .sort((a, b) => {
       if (!a.id && b.id) return -1;
       if (a.id && !b.id) return 1;
+
+      const aAtrasado = checarSeAtrasado(a);
+      const bAtrasado = checarSeAtrasado(b);
+      if (aAtrasado && !bAtrasado) return -1;
+      if (!aAtrasado && bAtrasado) return 1;
+
       if (ordenacaoEditor === 'placa') return (a.placa || '').localeCompare(b.placa || '');
 
       if (ordenacaoEditor === 'situacao') {
@@ -432,7 +445,13 @@ const Programacao = () => {
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([, grupo]) => ({
             ...grupo,
-            itens: grupo.itens.sort((a, b) => (parseDate(a.data_parada)?.getTime() || 0) - (parseDate(b.data_parada)?.getTime() || 0)),
+            itens: grupo.itens.sort((a, b) => {
+              const aAtrasado = checarSeAtrasado(a);
+              const bAtrasado = checarSeAtrasado(b);
+              if (aAtrasado && !bAtrasado) return -1;
+              if (!aAtrasado && bAtrasado) return 1;
+              return (parseDate(a.data_parada)?.getTime() || 0) - (parseDate(b.data_parada)?.getTime() || 0);
+            }),
           }));
       }
     
@@ -639,37 +658,10 @@ const Programacao = () => {
     const item = dados.find((registro) => String(registro.id) === String(id));
     if (!item) return;
 
-    if (novaSituacao === 'ATRASADOS' && !checarSeAtrasado(item)) {
-      alert('A coluna ATRASADOS e automatica. Para mover este card, altere o prazo para uma data vencida.');
-      return;
-    }
-
     const payload = { situacao: novaSituacao };
 
     if (novaSituacao !== 'FINALIZADO' && item.data_final) {
       payload.data_final = null;
-    }
-
-    const prazoAtual = parseDate(item.prazo);
-    const ficariaAtrasadoAoReabrir = Boolean(item.data_final && prazoAtual && prazoAtual.getTime() < Date.now());
-    const precisaNovoPrazo = novaSituacao !== 'FINALIZADO'
-      && novaSituacao !== 'ATRASADOS'
-      && (checarSeAtrasado(item) || ficariaAtrasadoAoReabrir);
-
-    if (precisaNovoPrazo) {
-      const valorPrazo = window.prompt(
-        'Este card esta atrasado. Informe um novo prazo (AAAA-MM-DD HH:mm):',
-        formatDtInput(new Date(Date.now() + 24 * 60 * 60 * 1000)).replace('T', ' ')
-      );
-      if (!valorPrazo) return;
-
-      const novoPrazo = toIsoOrNull(valorPrazo.replace(' ', 'T'));
-      if (!novoPrazo || parseDate(novoPrazo).getTime() < Date.now()) {
-        alert('Informe um prazo valido que nao esteja vencido.');
-        return;
-      }
-      payload.prazo = novoPrazo;
-      payload.reprogramado = 'SIM';
     }
 
     if (novaSituacao === 'EM ANDAMENTO') {
@@ -1038,6 +1030,7 @@ const handleDragOverGantt = (e) => {
     </div>
     <p className="text-[10px] font-black text-red-500 mb-2 uppercase tracking-wide truncate">{item.tipo} - {item.falha}</p>
     {item.reprogramado === 'SIM' && <span className="inline-flex text-[9px] font-black text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">REPROGRAMADO</span>}
+    {checarSeAtrasado(item) && <span className="ml-1 inline-flex text-[9px] font-black text-white bg-red-600 border border-red-700 rounded px-2 py-0.5">ATRASADO</span>}
     <span className={`inline-flex text-[9px] font-black border rounded px-2 py-0.5 mt-2 ${classeEtiquetaStatus(item)}`}>
   {situacaoVisual(item)}
 </span>
