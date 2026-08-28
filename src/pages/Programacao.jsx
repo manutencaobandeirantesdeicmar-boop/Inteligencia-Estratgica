@@ -179,9 +179,14 @@ const normalizarSituacaoPorDatas = (item) => {
   if (checarSeAtrasado(item)) return { ...item, situacao: 'ATRASADOS' };
 
   const situacao = normalizarTexto(item?.situacao);
-  if (situacao === 'EM ANDAMENTO' || situacao === 'AGUARDANDO PEÇA') {
-    return { ...item, situacao };
+  if (situacao === 'AGUARDANDO PEÇA') return { ...item, situacao };
+
+  const dataProgramada = parseDate(item?.data_parada);
+  if (dataProgramada && dataProgramada.getTime() <= Date.now()) {
+    return { ...item, situacao: 'EM ANDAMENTO' };
   }
+
+  if (situacao === 'EM ANDAMENTO') return { ...item, situacao };
 
   return { ...item, situacao: 'PROGRAMADO' };
 };
@@ -205,7 +210,7 @@ const buildLinhaVazia = () => ({
 });
 
 const DatalistInput = ({ campo, value, options, onChange, className, placeholder = '' }) => (
-  <>
+  <div className="relative w-full">
     <input
       list={dataListId(campo)}
       value={value || ''}
@@ -213,10 +218,20 @@ const DatalistInput = ({ campo, value, options, onChange, className, placeholder
       placeholder={placeholder}
       className={className}
     />
+    <select
+      value=""
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={`Opcoes de ${campo}`}
+      className="absolute inset-y-0 right-0 z-10 w-9 cursor-pointer opacity-0"
+    >
+      <option value="" disabled>Selecionar</option>
+      {options.map((opcao) => <option key={opcao} value={opcao}>{opcao}</option>)}
+    </select>
+    <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-slate-500">▼</span>
     <datalist id={dataListId(campo)}>
       {options.map((opcao) => <option key={opcao} value={opcao} />)}
     </datalist>
-  </>
+  </div>
 );
 
 const Programacao = () => {
@@ -274,8 +289,8 @@ const Programacao = () => {
     )));
   };
 
-  const fetchProgramacao = async () => {
-    setLoading(true);
+  const fetchProgramacao = async (exibirLoading = true) => {
+    if (exibirLoading) setLoading(true);
     const { data, error } = await supabase.from('programacao').select('*').order('data_parada', { ascending: true });
     if (!error) {
       const registros = data || [];
@@ -286,7 +301,7 @@ const Programacao = () => {
     } else {
       alert(`Erro ao carregar programacao: ${error.message}`);
     }
-    setLoading(false);
+    if (exibirLoading) setLoading(false);
   };
 
   const fetchEquipamentos = async () => {
@@ -297,6 +312,12 @@ const Programacao = () => {
   useEffect(() => {
     fetchProgramacao();
     fetchEquipamentos();
+
+    const intervaloSituacoes = window.setInterval(() => {
+      fetchProgramacao(false);
+    }, 60 * 1000);
+
+    return () => window.clearInterval(intervaloSituacoes);
   }, []);
 
   const toggleSelecao = (valor, selecionados, setSelecionados) => {
@@ -1326,6 +1347,7 @@ const handleDragOverGantt = (e) => {
                                     <span className="font-black text-slate-400 uppercase">Responsavel</span><span className="font-bold">{item.responsavel || '-'}</span>
                                     <span className="font-black text-slate-400 uppercase">Falha</span><span className="font-bold">{item.falha || '-'}</span>
                                     <span className="font-black text-slate-400 uppercase">OS</span><span className="font-bold">{item.os || '-'}</span>
+                                    <span className="font-black text-slate-400 uppercase">Programada</span><span className="font-bold">{formatarDataHoraBR(item.data_parada)}</span>
                                     <span className="font-black text-slate-400 uppercase">Observacoes</span><span className="font-bold whitespace-normal">{item.observacoes || '-'}</span>
                                   </div>
                                 </div>
