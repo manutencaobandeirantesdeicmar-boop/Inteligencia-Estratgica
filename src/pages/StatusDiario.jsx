@@ -585,7 +585,7 @@ const StatusDiario = () => {
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] md:rounded-3xl shadow-2xl overflow-hidden animate-fade-in">
             <div className="bg-gradient-to-r from-[#0f4c81] to-[#10b981] p-6 text-white flex justify-between items-center">
               <div>
-                <h2 className="text-lg md:text-xl font-black uppercase tracking-tight flex items-center gap-2"><Edit3 size={20} /> Atualizar Status</h2>
+                <h2 className="text-lg md:text-xl font-black uppercase tracking-tight flex items-center gap-2"><Edit3 size={20} /> Atualizar Status.</h2>
                 <p className="text-[10px] opacity-80 font-bold uppercase tracking-widest mt-1">Ativo: {itemSelecionado?.tag || itemSelecionado?.frota}</p>
               </div>
               <button onClick={() => setModalAberto(false)} className="hover:bg-white/20 p-2 rounded-full transition"><X size={24}/></button>
