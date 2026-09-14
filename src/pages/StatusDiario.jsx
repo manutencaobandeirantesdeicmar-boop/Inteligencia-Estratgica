@@ -2,7 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase-config';
 import { useNavigate } from 'react-router-dom';
 import { Truck, ChevronLeft, Filter, Edit3, Share2, PlusCircle, CheckCircle2, AlertCircle, Mail, X, CalendarClock } from 'lucide-react';
-import emailjs from '@emailjs/browser';
+
+const EMAIL_SCRIPT_URL = import.meta.env.VITE_GOOGLE_SCRIPT_EMAIL_URL || '';
+const FORM_GESTAO_INICIAL = {
+  tag: '', frota: '', placa: '', modelo: '',
+  familia: '', ccusto: '', local: 'BK', operacao: 'BK', descricao_modelo: '',
+};
+
+const escaparHtml = (valor) => String(valor ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
 
 const StatusDiario = () => {
   const navigate = useNavigate();
@@ -19,41 +31,80 @@ const StatusDiario = () => {
   const [novoMotivo, setNovoMotivo] = useState('');
   const [novaPrevisao, setNovaPrevisao] = useState(''); 
   const [destinatarios, setDestinatarios] = useState('carina.ribeiro@band-deicmar.com.br');
+  const [enviandoEmail, setEnviandoEmail] = useState(false);
 
   // Novos estados para Cadastro e Transferência
   const [modalGestaoAberto, setModalGestaoAberto] = useState(false);
   const [abaGestao, setAbaGestao] = useState('equipamento'); // 'equipamento', 'caminhao' ou 'transferencia'
-  const [formGestao, setFormGestao] = useState({
-    // Campos comuns e específicos
-    id: '', tag: '', frota: '', placa: '', modelo: '', 
-    familia: '', ccusto: '', local: '', operacao: '', descricao_modelo: ''
-  });
+  const [formGestao, setFormGestao] = useState(FORM_GESTAO_INICIAL);
 
   const handleSalvarGestao = async () => {
     setLoading(true);
     try {
       if (abaGestao === 'transferencia') {
+        if (!formGestao.tag || !formGestao.local) {
+          throw new Error('Selecione o equipamento e o destino da transferência.');
+        }
+
         // Lógica de Transferência (Update)
         const { error } = await supabase
           .from('equipamentos')
-          .update({ local: formGestao.local, ultimaAtualizacao: new Date() })
+          .update({ local: formGestao.local, ultimaAtualizacao: new Date().toISOString() })
           .eq('tag', formGestao.tag);
         if (error) throw error;
         alert("✅ Equipamento transferido com sucesso!");
       } else {
         const tabela = abaGestao === 'equipamento' ? 'equipamentos' : 'caminhoes';
-        const idAtivo = abaGestao === 'equipamento' ? formGestao.tag : formGestao.frota;
-        
-        const { error } = await supabase
+        const identificacao = abaGestao === 'equipamento' ? formGestao.tag.trim() : formGestao.frota.trim();
+        const unidade = abaGestao === 'equipamento' ? formGestao.local : formGestao.operacao;
+
+        if (!identificacao || !formGestao.modelo.trim() || !unidade) {
+          throw new Error('Preencha a identificação, o modelo e a unidade antes de salvar.');
+        }
+
+        const payload = abaGestao === 'equipamento'
+          ? {
+              tag: identificacao,
+              modelo: formGestao.modelo.trim(),
+              descricao_modelo: formGestao.modelo.trim(),
+              local: unidade,
+              status: 'Liberada',
+              ultimaAtualizacao: new Date().toISOString(),
+            }
+          : {
+              frota: identificacao,
+              placa: formGestao.placa.trim(),
+              modelo: formGestao.modelo.trim(),
+              operacao: unidade,
+              status: 'Liberada',
+              ultimaAtualizacao: new Date().toISOString(),
+            };
+
+        const { data, error } = await supabase
           .from(tabela)
-          .insert([{ ...formGestao, id: idAtivo, status: 'Liberada' }]);
+          .insert([payload])
+          .select()
+          .single();
         if (error) throw error;
+
+        if (abaAtiva === tabela) {
+          setDados((anteriores) => [...anteriores, data].sort((a, b) => (
+            (abaAtiva === 'equipamentos' ? a.tag : a.frota)
+              .localeCompare(abaAtiva === 'equipamentos' ? b.tag : b.frota)
+          )));
+        }
+
         alert(`✅ ${abaGestao.toUpperCase()} cadastrado com sucesso!`);
       }
       setModalGestaoAberto(false);
-      window.location.reload(); // Recarrega para atualizar a lista
+      setFormGestao(FORM_GESTAO_INICIAL);
     } catch (err) {
-      alert("Erro na operação: " + err.message);
+      const mensagem = err?.code === '23505'
+        ? 'Já existe um ativo com essa identificação.'
+        : err?.code === '42501'
+          ? 'Seu usuário não possui permissão para incluir equipamentos. Verifique a política de INSERT no Supabase.'
+          : err.message;
+      alert("Erro na operação: " + mensagem);
     } finally {
       setLoading(false);
     }
@@ -77,7 +128,43 @@ const StatusDiario = () => {
     return dataString.split('-').reverse().join('/');
   };
 
+  const postarNoGoogleScript = (payload) => {
+    const iframeName = 'status-diario-email-frame';
+    let iframe = document.querySelector(`iframe[name="${iframeName}"]`);
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.name = iframeName;
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = EMAIL_SCRIPT_URL;
+    form.target = iframeName;
+    form.style.display = 'none';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = JSON.stringify(payload);
+    form.appendChild(input);
+
+    document.body.appendChild(form);
+    form.submit();
+    window.setTimeout(() => form.remove(), 1000);
+  };
+
   const dispararEmail = () => {
+    if (!destinatarios.trim()) {
+      alert('Informe pelo menos um destinatário.');
+      return;
+    }
+    if (!EMAIL_SCRIPT_URL) {
+      alert('Configure VITE_GOOGLE_SCRIPT_EMAIL_URL com a URL do Web App do Google Apps Script.');
+      return;
+    }
+
     const ativosRelatorio = dadosExibidos;
     const dataFormatada = new Date().toLocaleDateString('pt-BR').replaceAll('/', '.');
 
@@ -135,22 +222,40 @@ const StatusDiario = () => {
     });
     resumoHtml += `</div>`;
 
-    const templateParams = {
-      unidade: filtroUnidade,
-      total_ativos: ativosRelatorio.length,
-      total_parados: ativosRelatorio.filter(a => a.status === 'Parada').length,
-      detalhes_gerais_html: tabelaHtml, 
-      resumo_disponibilidade_html: resumoHtml,
-      data_atual: dataFormatada,
-      to_email: destinatarios 
-    };
+    const totalParados = ativosRelatorio.filter(a => a.status === 'Parada').length;
+    const html = [
+      '<div style="font-family:Segoe UI,Roboto,sans-serif;background-color:#f3f6f9;padding:30px 10px;color:#1e293b;">',
+      '<table align="center" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color:#ffffff;border-radius:28px;overflow:hidden;box-shadow:0 20px 40px rgba(15,76,129,0.08);border:1px solid #e1e8ed;">',
+      '<tr><td style="background:linear-gradient(135deg,#0f4c81 0%,#10b981 100%);padding:45px 20px;text-align:center;">',
+      '<img src="https://i.ibb.co/Y4jjxnVb/08f3d902-e667-4927-8741-c47dfe39329b.png" alt="Logo" style="max-height:60px;width:auto;margin-bottom:25px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.15));">',
+      '<h1 style="color:#ffffff;margin:0;font-size:24px;text-transform:uppercase;letter-spacing:4px;font-weight:900;">Status Diário</h1>',
+      `<p style="color:rgba(255,255,255,0.85);margin:10px 0 0;font-size:13px;font-weight:600;letter-spacing:1px;">UNIDADE: <span style="color:#ffffff;">${escaparHtml(filtroUnidade)}</span> | ${dataFormatada}</p>`,
+      '</td></tr>',
+      '<tr><td style="padding:30px 25px 10px;"><table width="100%" cellspacing="0" cellpadding="0"><tr>',
+      `<td align="center" width="48%" style="background-color:#f8fafc;padding:18px;border-radius:20px;border:1px solid #e2e8f0;"><span style="display:block;font-size:10px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:1px;">Frota Total</span><span style="font-size:30px;font-weight:900;color:#0f4c81;">${ativosRelatorio.length}</span></td>`,
+      '<td width="4%">&nbsp;</td>',
+      `<td align="center" width="48%" style="background-color:#fff1f2;padding:18px;border-radius:20px;border:1px solid #fecdd3;"><span style="display:block;font-size:10px;color:#e11d48;font-weight:800;text-transform:uppercase;letter-spacing:1px;">Fora de Operação</span><span style="font-size:30px;font-weight:900;color:#e11d48;">${totalParados}</span></td>`,
+      '</tr></table></td></tr>',
+      `<tr><td style="padding:25px;"><div style="border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;">${tabelaHtml}</div></td></tr>`,
+      `<tr><td style="padding:0 25px 40px;"><div style="background-color:#f8fafc;border:2px solid #0f4c81;border-radius:24px;padding:30px;text-align:center;"><h3 style="color:#0f4c81;font-size:16px;margin:0 0 25px;text-transform:uppercase;letter-spacing:2px;font-weight:900;border-bottom:1px solid #e2e8f0;padding-bottom:12px;">Resumo de Disponibilidade</h3><div style="color:#0f4c81;">${resumoHtml}</div></div></td></tr>`,
+      '<tr><td style="background-color:#f1f5f9;padding:25px;text-align:center;font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:2px;font-weight:700;">Bandeirantes Deicmar • 2026</td></tr>',
+      '</table></div>',
+    ].join('');
 
-    emailjs.send('service_ql8lpnh', 'template_n6464qs', templateParams, 'dxlv8dovCZmMHhwgD')
-      .then(() => {
-        alert('✅ Relatório enviado com sucesso!');
-        setModalEnvioAberto(false);
-      })
-      .catch((err) => alert('❌ Erro: ' + err.text));
+    setEnviandoEmail(true);
+    try {
+      postarNoGoogleScript({
+        to: destinatarios,
+        subject: `Status Diário - ${filtroUnidade} - ${dataFormatada}`,
+        html,
+      });
+      alert('✅ Solicitação enviada ao Google Apps Script.');
+      setModalEnvioAberto(false);
+    } catch (err) {
+      alert('❌ Erro ao preparar o envio: ' + err.message);
+    } finally {
+      window.setTimeout(() => setEnviandoEmail(false), 1000);
+    }
   };
 
   const handleSalvarStatus = async () => {
@@ -220,7 +325,11 @@ const StatusDiario = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => { setAbaGestao(abaAtiva === 'equipamentos' ? 'equipamento' : 'caminhao'); setModalGestaoAberto(true); }}
+          <button onClick={() => {
+            setAbaGestao(abaAtiva === 'equipamentos' ? 'equipamento' : 'caminhao');
+            setFormGestao(FORM_GESTAO_INICIAL);
+            setModalGestaoAberto(true);
+          }}
           className="bg-[#10b981] text-white p-2 md:px-4 rounded-lg flex items-center gap-2 text-xs md:text-sm font-bold shadow-md hover:bg-emerald-600 transition" >
         <PlusCircle size={16} /> <span className="hidden sm:inline">Novo / Transferir</span>
         </button>
@@ -371,9 +480,9 @@ const StatusDiario = () => {
 
             {/* ABAS DO MODAL */}
             <div className="flex bg-slate-100 p-1 m-6 rounded-xl">
-              <button onClick={() => setAbaGestao('equipamento')} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'equipamento' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Novo Equip.</button>
-              <button onClick={() => setAbaGestao('caminhao')} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'caminhao' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Novo Caminhão</button>
-              <button onClick={() => setAbaGestao('transferencia')} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'transferencia' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Transferir</button>
+              <button onClick={() => { setAbaGestao('equipamento'); setFormGestao(FORM_GESTAO_INICIAL); }} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'equipamento' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Novo Equip.</button>
+              <button onClick={() => { setAbaGestao('caminhao'); setFormGestao(FORM_GESTAO_INICIAL); }} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'caminhao' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Novo Caminhão</button>
+              <button onClick={() => { setAbaGestao('transferencia'); setFormGestao(FORM_GESTAO_INICIAL); }} className={`flex-1 py-2 rounded-lg font-bold text-[10px] uppercase transition ${abaGestao === 'transferencia' ? 'bg-white text-[#0f4c81] shadow-sm' : 'text-slate-500'}`}>Transferir</button>
             </div>
 
             <div className="px-6 pb-8 space-y-4 max-h-[60vh] overflow-y-auto">
@@ -382,6 +491,7 @@ const StatusDiario = () => {
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Equipamento (Tag)</label>
                     <select 
+                      value={formGestao.tag}
                       onChange={(e) => setFormGestao({...formGestao, tag: e.target.value})}
                       className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]"
                     >
@@ -392,6 +502,7 @@ const StatusDiario = () => {
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Novo Local (Destino)</label>
                     <select 
+                      value={formGestao.local}
                       onChange={(e) => setFormGestao({...formGestao, local: e.target.value})}
                       className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#10b981]"
                     >
@@ -409,6 +520,7 @@ const StatusDiario = () => {
                     <input 
                       type="text" 
                       placeholder="Ex: RS-102 ou 5020"
+                      value={abaGestao === 'equipamento' ? formGestao.tag : formGestao.frota}
                       onChange={(e) => setFormGestao(abaGestao === 'equipamento' ? {...formGestao, tag: e.target.value.toUpperCase()} : {...formGestao, frota: e.target.value.toUpperCase()})}
                       className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" 
                     />
@@ -416,16 +528,17 @@ const StatusDiario = () => {
                   {abaGestao === 'caminhao' && (
                     <div className="col-span-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Placa</label>
-                      <input type="text" placeholder="ABC-1234" onChange={(e) => setFormGestao({...formGestao, placa: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" />
+                      <input type="text" placeholder="ABC-1234" value={formGestao.placa} onChange={(e) => setFormGestao({...formGestao, placa: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" />
                     </div>
                   )}
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Modelo</label>
-                    <input type="text" onChange={(e) => setFormGestao({...formGestao, modelo: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" />
+                    <input type="text" value={formGestao.modelo} onChange={(e) => setFormGestao({...formGestao, modelo: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Unidade/Operação</label>
                     <select 
+                      value={abaGestao === 'equipamento' ? formGestao.local : formGestao.operacao}
                       onChange={(e) => setFormGestao(abaGestao === 'equipamento' ? {...formGestao, local: e.target.value} : {...formGestao, operacao: e.target.value})}
                       className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]"
                     >
@@ -460,7 +573,7 @@ const StatusDiario = () => {
             <div className="p-6 md:p-8">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Destinatários</label>
               <textarea value={destinatarios} onChange={(e) => setDestinatarios(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:border-[#10b981] outline-none transition resize-none text-sm" rows="3" placeholder="exemplo@email.com" />
-              <button onClick={dispararEmail} className="w-full mt-6 mb-4 md:mb-0 py-4 bg-[#0f4c81] text-white font-black uppercase tracking-widest rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Share2 size={18}/> Confirmar e Enviar</button>
+              <button onClick={dispararEmail} disabled={enviandoEmail} className="w-full mt-6 mb-4 md:mb-0 py-4 bg-[#0f4c81] text-white font-black uppercase tracking-widest rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"><Share2 size={18}/> {enviandoEmail ? 'Enviando...' : 'Confirmar e Enviar'}</button>
             </div>
           </div>
         </div>
