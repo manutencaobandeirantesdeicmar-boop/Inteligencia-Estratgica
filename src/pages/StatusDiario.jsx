@@ -5,7 +5,7 @@ import { Truck, ChevronLeft, Filter, Edit3, Share2, PlusCircle, CheckCircle2, Al
 
 const EMAIL_SCRIPT_URL = import.meta.env.VITE_GOOGLE_SCRIPT_EMAIL_URL || '';
 const FORM_GESTAO_INICIAL = {
-  tag: '', frota: '', placa: '', modelo: '',
+  id: '', tag: '', frota: '', placa: '', modelo: '',
   familia: '', ccusto: '', local: 'BK', operacao: 'BK', descricao_modelo: '',
 };
 
@@ -55,15 +55,23 @@ const StatusDiario = () => {
         alert("✅ Equipamento transferido com sucesso!");
       } else {
         const tabela = abaGestao === 'equipamento' ? 'equipamentos' : 'caminhoes';
-        const identificacao = abaGestao === 'equipamento' ? formGestao.tag.trim() : formGestao.frota.trim();
+        const idEquipamento = formGestao.id.trim();
+        const frota = formGestao.frota.trim();
+        const placa = formGestao.placa.trim();
+        const identificacao = abaGestao === 'equipamento'
+          ? formGestao.tag.trim()
+          : (frota || placa);
         const unidade = abaGestao === 'equipamento' ? formGestao.local : formGestao.operacao;
 
-        if (!identificacao || !formGestao.modelo.trim() || !unidade) {
-          throw new Error('Preencha a identificação, o modelo e a unidade antes de salvar.');
+        if (!identificacao || !formGestao.modelo.trim() || !unidade || (abaGestao === 'equipamento' && !idEquipamento) || (abaGestao === 'caminhao' && !placa)) {
+          throw new Error(abaGestao === 'equipamento'
+            ? 'Preencha o ID, a TAG, o modelo e a unidade antes de salvar.'
+            : 'Preencha a placa, o modelo e a unidade antes de salvar.');
         }
 
         const payload = abaGestao === 'equipamento'
           ? {
+              id: idEquipamento,
               tag: identificacao,
               modelo: formGestao.modelo.trim(),
               descricao_modelo: formGestao.modelo.trim(),
@@ -72,8 +80,9 @@ const StatusDiario = () => {
               ultimaAtualizacao: new Date().toISOString(),
             }
           : {
-              frota: identificacao,
-              placa: formGestao.placa.trim(),
+              id: identificacao,
+              frota: frota || null,
+              placa,
               modelo: formGestao.modelo.trim(),
               operacao: unidade,
               status: 'Liberada',
@@ -256,6 +265,14 @@ const StatusDiario = () => {
     } finally {
       window.setTimeout(() => setEnviandoEmail(false), 1000);
     }
+  };
+
+  const autorizarEmailGoogle = () => {
+    if (!EMAIL_SCRIPT_URL) {
+      alert('Configure VITE_GOOGLE_SCRIPT_EMAIL_URL com a URL do Web App do Google Apps Script.');
+      return;
+    }
+    window.open(EMAIL_SCRIPT_URL, '_blank', 'noopener,noreferrer');
   };
 
   const handleSalvarStatus = async () => {
@@ -513,13 +530,25 @@ const StatusDiario = () => {
                 </>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
+                  {abaGestao === 'equipamento' && (
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">ID do Sistema</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: CMB0001"
+                        value={formGestao.id}
+                        onChange={(e) => setFormGestao({...formGestao, id: e.target.value.toUpperCase()})}
+                        className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]"
+                      />
+                    </div>
+                  )}
                   <div className="col-span-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
-                      {abaGestao === 'equipamento' ? 'Tag do Equipamento' : 'Prefixo da Frota'}
+                      {abaGestao === 'equipamento' ? 'Tag do Equipamento' : 'Número de Frota'}
                     </label>
                     <input 
                       type="text" 
-                      placeholder="Ex: RS-102 ou 5020"
+                      placeholder={abaGestao === 'equipamento' ? 'Ex: EE01' : 'Ex: 5020 — deixe vazio para carreta'}
                       value={abaGestao === 'equipamento' ? formGestao.tag : formGestao.frota}
                       onChange={(e) => setFormGestao(abaGestao === 'equipamento' ? {...formGestao, tag: e.target.value.toUpperCase()} : {...formGestao, frota: e.target.value.toUpperCase()})}
                       className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" 
@@ -527,8 +556,9 @@ const StatusDiario = () => {
                   </div>
                   {abaGestao === 'caminhao' && (
                     <div className="col-span-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Placa</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Placa do Caminhão ou Carreta</label>
                       <input type="text" placeholder="ABC-1234" value={formGestao.placa} onChange={(e) => setFormGestao({...formGestao, placa: e.target.value.toUpperCase()})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-[#0f4c81]" />
+                      <p className="mt-1 text-[10px] text-slate-400">Para carreta, deixe o número de frota vazio: a placa será usada como ID.</p>
                     </div>
                   )}
                   <div>
@@ -573,6 +603,10 @@ const StatusDiario = () => {
             <div className="p-6 md:p-8">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Destinatários</label>
               <textarea value={destinatarios} onChange={(e) => setDestinatarios(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:border-[#10b981] outline-none transition resize-none text-sm" rows="3" placeholder="exemplo@email.com" />
+              <button onClick={autorizarEmailGoogle} className="w-full mt-4 py-3 border-2 border-[#10b981] text-[#047857] font-black uppercase tracking-widest rounded-2xl text-xs hover:bg-emerald-50 transition">
+                1. Autorizar meu e-mail Google
+              </button>
+              <p className="mt-2 text-center text-[10px] text-slate-400">Necessário apenas no primeiro envio por usuário.</p>
               <button onClick={dispararEmail} disabled={enviandoEmail} className="w-full mt-6 mb-4 md:mb-0 py-4 bg-[#0f4c81] text-white font-black uppercase tracking-widest rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"><Share2 size={18}/> {enviandoEmail ? 'Enviando...' : 'Confirmar e Enviar'}</button>
             </div>
           </div>
