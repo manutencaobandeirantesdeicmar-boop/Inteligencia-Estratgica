@@ -236,7 +236,7 @@ const StatusDiario = () => {
       '<div style="font-family:Segoe UI,Roboto,sans-serif;background-color:#f3f6f9;padding:30px 10px;color:#1e293b;">',
       '<table align="center" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color:#ffffff;border-radius:28px;overflow:hidden;box-shadow:0 20px 40px rgba(15,76,129,0.08);border:1px solid #e1e8ed;">',
       '<tr><td style="background:linear-gradient(135deg,#0f4c81 0%,#10b981 100%);padding:45px 20px;text-align:center;">',
-      '<img src="https://i.ibb.co/Y4jjxnVb/08f3d902-e667-4927-8741-c47dfe39329b.png" alt="Logo" style="max-height:60px;width:auto;margin-bottom:25px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.15));">',
+      '<img src="https://i.postimg.cc/SsQHW6x8/08f3d902-e667-4927-8741-c47dfe39329b.png" alt="Logo" style="max-height:60px;width:auto;margin-bottom:25px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.15));">',
       '<h1 style="color:#ffffff;margin:0;font-size:24px;text-transform:uppercase;letter-spacing:4px;font-weight:900;">Status Diário</h1>',
       `<p style="color:rgba(255,255,255,0.85);margin:10px 0 0;font-size:13px;font-weight:600;letter-spacing:1px;">UNIDADE: <span style="color:#ffffff;">${escaparHtml(filtroUnidade)}</span> | ${dataFormatada}</p>`,
       '</td></tr>',
