@@ -84,7 +84,7 @@ const HubInicial = () => {
       <header className="z-10 flex flex-col items-center mb-8 md:mb-14 animate-fade-in text-center">
         <div className="h-16 md:h-24 mb-6">
           <img 
-            src="https://i.ibb.co/Y4jjxnVb/08f3d902-e667-4927-8741-c47dfe39329b.png" 
+            src="https://i.postimg.cc/SsQHW6x8/08f3d902-e667-4927-8741-c47dfe39329b.png" 
             alt="Logo Deicmar" 
             className="h-full object-contain filter brightness-125 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
           />
@@ -101,7 +101,7 @@ const HubInicial = () => {
           <div className="col-span-2 md:col-span-6 md:col-start-4 md:row-start-1 md:row-span-3 flex justify-center order-1 md:order-2 relative px-4">
              <div className="absolute inset-0 bg-[#0f4c81]/30 rounded-full blur-[80px] scale-125 opacity-30 animate-pulse"></div>
              <img 
-                src="https://i.ibb.co/Kxx70spx/8e65be83-2509-4c60-8a6c-e01c71b8b8e1.png" 
+                src="https://i.postimg.cc/xCyMSmvL/e5ad0fdd-799e-4537-aa73-5a80d11cdcc2.png" 
                 alt="Operação Central" 
                 className="relative z-10 w-64 md:w-full md:max-w-[550px] object-contain animate-float filter drop-shadow-[0_30px_60px_rgba(0,0,0,0.7)]"
              />
