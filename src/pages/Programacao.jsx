@@ -293,17 +293,32 @@ const Programacao = () => {
 
   const fetchProgramacao = async (exibirLoading = true) => {
     if (exibirLoading) setLoading(true);
-    const { data, error } = await supabase.from('programacao').select('*').order('data_parada', { ascending: true });
-    if (!error) {
-      const registros = data || [];
+    try {
+      const registros = [];
+      const tamanhoLote = 1000;
+      let inicio = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('programacao')
+          .select('*')
+          .order('data_parada', { ascending: true })
+          .order('id', { ascending: true })
+          .range(inicio, inicio + tamanhoLote - 1);
+        if (error) throw error;
+        const lote = data || [];
+        registros.push(...lote);
+        if (lote.length < tamanhoLote) break;
+        inicio += tamanhoLote;
+      }
       const normalizados = registros.map(normalizarSituacaoPorDatas);
       setDados(normalizados);
       setLinhasPlanilha(normalizados);
       await atualizarSituacoesAutomaticasNoBanco(registros);
-    } else {
+    } catch (error) {
       alert(`Erro ao carregar programacao: ${error.message}`);
+    } finally {
+      if (exibirLoading) setLoading(false);
     }
-    if (exibirLoading) setLoading(false);
   };
 
   const fetchEquipamentos = async () => {
@@ -1320,21 +1335,17 @@ const handleDragOverGantt = (e) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 relative">
-                  <tr className="h-14 bg-emerald-50/50">
+                  <tr className="h-20">
                     {diasGantt.map((dia, idx) => (
                       <td
                         key={idx}
                         onClick={() => abrirModalNovaManutencao(dia)}
                         onDragOver={handleDragOverGantt}
                         onDrop={(e) => onDropGantt(e, dia)}
-                        className="border-r border-slate-200 cursor-pointer hover:bg-emerald-100 transition-colors text-center"
+                        className="border-r border-slate-100/50 cursor-pointer hover:bg-blue-50/50 transition-colors"
                         style={{ width: `${LARGURA_DIA_GANTT}px` }}
                         title="Clique para adicionar manutencao neste dia"
-                      >
-                        <span className="inline-flex items-center justify-center gap-1 text-emerald-700 text-xs font-bold">
-                          <PlusCircle size={14} /> Adicionar
-                        </span>
-                      </td>
+                      />
                     ))}
                   </tr>
                   {itensGantt.map((item) => {
