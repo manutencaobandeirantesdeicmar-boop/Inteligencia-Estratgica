@@ -1320,6 +1320,23 @@ const handleDragOverGantt = (e) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 relative">
+                  <tr className="h-14 bg-emerald-50/50">
+                    {diasGantt.map((dia, idx) => (
+                      <td
+                        key={idx}
+                        onClick={() => abrirModalNovaManutencao(dia)}
+                        onDragOver={handleDragOverGantt}
+                        onDrop={(e) => onDropGantt(e, dia)}
+                        className="border-r border-slate-200 cursor-pointer hover:bg-emerald-100 transition-colors text-center"
+                        style={{ width: `${LARGURA_DIA_GANTT}px` }}
+                        title="Clique para adicionar manutencao neste dia"
+                      >
+                        <span className="inline-flex items-center justify-center gap-1 text-emerald-700 text-xs font-bold">
+                          <PlusCircle size={14} /> Adicionar
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
                   {itensGantt.map((item) => {
                     const dataParada = parseDate(item.data_parada);
                     const dataFimReal = parseDate(item.data_final || item.prazo || item.data_parada) || dataParada;
